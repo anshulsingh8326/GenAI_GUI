@@ -49,5 +49,6 @@ class SettingsPayload(BaseModel):
     folders: FoldersBlock | None = None
     prompts: dict[str, str] | None = None
     autoFreeVram: bool | None = None
+    comfyuiLauncher: str | None = None
     agentEnabled: bool | None = None
     agentToken: str | None = None

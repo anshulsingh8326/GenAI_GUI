@@ -21,6 +21,7 @@ export const useEngineStore = defineStore('engine', () => {
 
   const comfyLoaded = ref<LoadedModel[]>([])
   const ollamaLoaded = ref<LoadedModel[]>([])
+  const launching = ref(false)
 
   // jobs started by the GUI itself (mock chat jobs for now) - added on top of
   // what ComfyUI reports so the busy lock works while a run is in flight
@@ -141,6 +142,21 @@ export const useEngineStore = defineStore('engine', () => {
     }
   }
 
+  /** Start the user's ComfyUI launcher (.bat saved in Settings) in its own window. */
+  async function launchComfy() {
+    launching.value = true
+    try {
+      const res = await api.launchComfyui()
+      ui.toast(res.detail, res.started ? 'success' : 'warn')
+      // give it a moment to boot, then refresh so the pills flip when it is up
+      if (res.started) setTimeout(() => void refresh(), 3000)
+    } catch (err) {
+      ui.toast(err instanceof Error ? err.message : 'Launch failed', 'error')
+    } finally {
+      launching.value = false
+    }
+  }
+
   // job bookkeeping for GUI-side runs (mock chat jobs until real jobs land)
   function jobStarted() {
     localJobs.value += 1
@@ -161,12 +177,14 @@ export const useEngineStore = defineStore('engine', () => {
     queueLabel,
     comfyLoaded,
     ollamaLoaded,
+    launching,
     refresh,
     startPolling,
     test,
     unloadComfy,
     unloadOllama,
     unloadAllOllama,
+    launchComfy,
     jobStarted,
     jobFinished,
   }

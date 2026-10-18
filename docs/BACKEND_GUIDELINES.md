@@ -124,6 +124,9 @@ Everything lives under `<repo>/data` (override: `GENAI_DATA_DIR`):
 - **Never trigger a model load.** Ollama unload only ever targets models already listed by
   `GET /api/ps`; ComfyUI gets at most `POST /free`. No test, no matter how quick, may load
   a model as a side effect.
+- **Starting user executables is explicit-only.** The ComfyUI launcher (`.bat` in settings,
+  `POST /api/engine/comfyui/launch`) runs solely from a user click in the GUI - never at
+  backend startup, never from probes or agent tools.
 - **No hard deletes** anywhere in backend code; the Delete path is move-to-trash.
 - Paths coming from users/agents are validated before use (folder validation service);
   imports are size- and extension-guarded (`library/service.py`).

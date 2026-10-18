@@ -1,7 +1,8 @@
 """Connector routes: connection tests + engine memory actions.
 
-Engine actions are safe by construction: /free only releases memory, and the
-Ollama unload only ever targets models that are already loaded.
+Engine actions are safe by construction: /free only releases memory, the Ollama
+unload only ever targets models that are already loaded, and /launch starts the
+user's own ComfyUI launcher on an explicit click - nothing runs automatically.
 """
 
 from __future__ import annotations
@@ -24,6 +25,12 @@ async def test_connection(kind: Literal["comfyui", "ollama"]) -> dict:
 @router.post("/engine/comfyui/free")
 async def free_comfyui() -> dict:
     return await service.free_comfyui()
+
+
+@router.post("/engine/comfyui/launch")
+def launch_comfyui() -> dict:
+    """Start the launcher saved in Settings (`comfyuiLauncher`) in its own window."""
+    return service.launch_comfyui()
 
 
 class UnloadRequest(BaseModel):

@@ -12,7 +12,9 @@ memory (`/api/ps`), so calling it can never cause a model to be loaded.
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import psutil
@@ -247,3 +249,54 @@ async def unload_ollama(model: str | None = None) -> dict:
     if len(targets) == 1:
         return {"ok": True, "message": f"{targets[0]} unloaded from memory"}
     return {"ok": True, "message": f"{len(targets)} Ollama models unloaded"}
+
+
+# ------------------------------------------------------------------- launcher
+
+
+LAUNCHABLE_SUFFIXES = {".bat", ".cmd", ".exe"}
+
+
+def launch_comfyui() -> dict:
+    """Start the user's ComfyUI launcher in a NEW console window (like a double-click).
+
+    Only ever runs on an explicit user action from the GUI - never at startup,
+    never from probes or agent tools. The path comes from Settings
+    (`comfyuiLauncher`); nothing is installed or downloaded, we literally start
+    the file the user chose, with its own folder as the working directory.
+    """
+    values, _ = settings_store.load()
+    raw = str(values.get("comfyuiLauncher") or "").strip()
+    if not raw:
+        return {
+            "started": False,
+            "path": "",
+            "detail": "No launcher set - pick your ComfyUI .bat in Settings > Connections.",
+        }
+
+    path = Path(raw).expanduser()
+    if not path.is_file():
+        return {
+            "started": False,
+            "path": str(path),
+            "detail": "The launcher file does not exist (did it move?).",
+        }
+    if path.suffix.lower() not in LAUNCHABLE_SUFFIXES:
+        return {
+            "started": False,
+            "path": str(path),
+            "detail": "Only .bat / .cmd / .exe launchers can be started.",
+        }
+
+    try:
+        # `start ""` opens the target in its own console window; cwd = the
+        # launcher's folder - the same thing double-clicking the file does.
+        subprocess.Popen(["cmd.exe", "/c", "start", "", str(path)], cwd=str(path.parent))
+    except OSError as err:
+        return {"started": False, "path": str(path), "detail": f"Could not start it: {err}"}
+
+    return {
+        "started": True,
+        "path": str(path),
+        "detail": "Launched in a new window - ComfyUI takes a moment to come up.",
+    }

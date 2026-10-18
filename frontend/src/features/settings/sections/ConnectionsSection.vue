@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { LoaderCircle, RefreshCw, ServerCog, MessageSquareText, SlidersHorizontal } from '@lucide/vue'
+import { FolderOpen, LoaderCircle, Play, RefreshCw, ServerCog, MessageSquareText, SlidersHorizontal } from '@lucide/vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useEngineStore } from '@/stores/engine'
+import { api, ApiError } from '@/lib/api'
+import { useUiStore } from '@/stores/ui'
 import Section from '@/components/ui/Section.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
@@ -13,8 +15,44 @@ import ProfilesModal from '../components/ProfilesModal.vue'
 
 const settings = useSettingsStore()
 const engine = useEngineStore()
+const ui = useUiStore()
 
 const managing = ref<'comfyui' | 'ollama' | null>(null)
+const browsingLauncher = ref(false)
+
+async function browseLauncher() {
+  browsingLauncher.value = true
+  try {
+    const res = await api.pickPath({
+      mode: 'file',
+      title: 'Select the ComfyUI launcher (.bat)',
+      start: settings.comfyuiLauncher,
+      extensions: ['bat', 'cmd', 'exe'],
+    })
+    if (res.path) settings.comfyuiLauncher = res.path
+  } catch (err) {
+    ui.toast(
+      err instanceof ApiError && err.isOffline
+        ? 'Backend offline - the file dialog opens on the machine running the backend.'
+        : `Could not open the dialog: ${err instanceof Error ? err.message : 'unknown error'}`,
+      'warn',
+    )
+  } finally {
+    browsingLauncher.value = false
+  }
+}
+
+function onLauncherDrop(e: DragEvent) {
+  const file = e.dataTransfer?.files?.[0] as (File & { path?: string }) | undefined
+  if (file?.path) {
+    settings.comfyuiLauncher = file.path
+    return
+  }
+  ui.toast(
+    'Browsers hide file paths on drag & drop - use Browse... to pick the .bat (drag & drop works in the desktop wrapper later).',
+    'warn',
+  )
+}
 
 const managingOpen = computed({
   get: () => managing.value !== null,
@@ -75,6 +113,32 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
       </AppButton>
     </div>
     <p v-if="comfyProfile?.auth" class="mt-2 text-[11px] text-muted">Auth header configured for this profile.</p>
+    <div class="mt-3 rounded-xl border border-dashed border-border p-3" @dragover.prevent @drop.prevent="onLauncherDrop">
+      <p class="text-xs font-medium">ComfyUI launcher (optional)</p>
+      <p class="mb-2 text-[11px] leading-relaxed text-muted">
+        Your own .bat that starts ComfyUI (e.g. run_nvidia_gpu.bat). Launch opens it in its own terminal window -
+        exactly like double-clicking it. Nothing runs automatically.
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="min-w-64 flex-1">
+          <AppInput v-model="settings.comfyuiLauncher" placeholder="Drag a .bat here, or Browse / paste a path" />
+        </div>
+        <AppButton variant="ghost" :disabled="browsingLauncher" @click="browseLauncher">
+          <LoaderCircle v-if="browsingLauncher" class="h-3.5 w-3.5 animate-spin" />
+          <FolderOpen v-else class="h-3.5 w-3.5" />
+          Browse...
+        </AppButton>
+        <ResetButton
+          :disabled="settings.isDefault(['comfyuiLauncher'])"
+          @reset="settings.resetField(['comfyuiLauncher'])"
+        />
+        <AppButton :disabled="!settings.comfyuiLauncher.trim() || engine.launching" @click="engine.launchComfy()">
+          <LoaderCircle v-if="engine.launching" class="h-3.5 w-3.5 animate-spin" />
+          <Play v-else class="h-3.5 w-3.5" />
+          Launch ComfyUI
+        </AppButton>
+      </div>
+    </div>
     <p class="mt-3 flex items-start gap-2 rounded-xl border border-border bg-surface-2/40 p-3 text-xs leading-relaxed text-muted">
       <ServerCog class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
       The app probes version, GPU and VRAM on every refresh (top bar pills and the Resources popover are live).

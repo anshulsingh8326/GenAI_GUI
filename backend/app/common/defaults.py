@@ -73,6 +73,7 @@ def default_settings() -> dict[str, Any]:
         "folders": folders,
         "prompts": dict(DEFAULT_PROMPTS),
         "autoFreeVram": True,
+        "comfyuiLauncher": "",  # optional .bat/.cmd/.exe that starts ComfyUI (Settings > Connections)
         "agentEnabled": False,
         "agentToken": DEFAULT_AGENT_TOKEN,
     }

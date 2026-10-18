@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { HardDrive, MessageSquareText, ServerCog } from '@lucide/vue'
+import { HardDrive, LoaderCircle, MessageSquareText, Play, ServerCog } from '@lucide/vue'
 import AppPopover from '@/components/ui/AppPopover.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import { useEngineStore } from '@/stores/engine'
+import { useSettingsStore } from '@/stores/settings'
 
 const open = ref(false)
 const engine = useEngineStore()
+const settings = useSettingsStore()
 
 function barWidth(known: boolean, usedGb: number, totalGb: number): string {
   if (!known || totalGb <= 0) return '0%'
@@ -70,7 +72,23 @@ function barWidth(known: boolean, usedGb: number, totalGb: number): string {
           <span>Engine - ComfyUI</span>
           <StatusDot class="ml-auto" :state="engine.comfy.connected ? 'ok' : 'off'" />
         </div>
-        <p v-if="!engine.comfy.connected" class="text-[11px] text-muted">ComfyUI is offline.</p>
+        <template v-if="!engine.comfy.connected">
+          <p class="text-[11px] text-muted">ComfyUI is offline.</p>
+          <AppButton
+            v-if="settings.comfyuiLauncher"
+            size="sm"
+            class="mt-2"
+            :disabled="engine.launching"
+            @click="engine.launchComfy()"
+          >
+            <LoaderCircle v-if="engine.launching" class="h-3.5 w-3.5 animate-spin" />
+            <Play v-else class="h-3.5 w-3.5" />
+            Start ComfyUI
+          </AppButton>
+          <p v-else class="mt-1 text-[10px] leading-relaxed text-muted">
+            Set your launcher .bat in Settings -> Connections to start it from here.
+          </p>
+        </template>
         <p v-else-if="!engine.comfyLoaded.length" class="text-[11px] text-muted">No models loaded.</p>
         <ul v-else class="space-y-1">
           <li v-for="m in engine.comfyLoaded" :key="m.id" class="flex items-center justify-between gap-2 text-[11px] text-muted">
@@ -78,7 +96,13 @@ function barWidth(known: boolean, usedGb: number, totalGb: number): string {
             <span class="shrink-0 tabular-nums">{{ m.sizeGb.toFixed(1) }} GB</span>
           </li>
         </ul>
-        <AppButton size="sm" class="mt-2.5" :disabled="engine.busy || !engine.comfy.connected" @click="engine.unloadComfy()">
+        <AppButton
+          v-if="engine.comfy.connected"
+          size="sm"
+          class="mt-2.5"
+          :disabled="engine.busy"
+          @click="engine.unloadComfy()"
+        >
           Unload all &amp; free VRAM
         </AppButton>
       </div>

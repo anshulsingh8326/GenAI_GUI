@@ -248,6 +248,18 @@ export interface EngineActionResult {
   message: string
 }
 
+/** /api/folders/pick result - null when the dialog was cancelled. */
+export interface PathPickResult {
+  path: string | null
+}
+
+/** /api/engine/comfyui/launch result. */
+export interface EngineLaunchResult {
+  started: boolean
+  path: string
+  detail: string
+}
+
 // -- backend settings contract (settings.json, /api/settings) -----------------
 
 export interface ConnectionProfile {
@@ -275,6 +287,8 @@ export interface SettingsValues {
   autoFreeVram: boolean
   agentEnabled: boolean
   agentToken: string
+  /** Optional .bat/.cmd/.exe that starts ComfyUI - launched only on explicit user action. */
+  comfyuiLauncher: string
 }
 
 export interface SettingsEnvelope {

@@ -9,10 +9,12 @@ import type {
   Asset,
   ConnTestResult,
   EngineActionResult,
+  EngineLaunchResult,
   FolderValidation,
   JobRecord,
   MockCompleteResult,
   NewJobDraft,
+  PathPickResult,
   SettingsEnvelope,
   SettingsValues,
   StatusSnapshot,
@@ -80,12 +82,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path, create }),
     }),
+  // OS-native dialog on the backend machine (browsers can't hand out real paths)
+  pickPath: (opts: { mode: 'file' | 'folder'; title?: string; start?: string; extensions?: string[] }) =>
+    request<PathPickResult>('/api/folders/pick', {
+      method: 'POST',
+      body: JSON.stringify({
+        mode: opts.mode,
+        title: opts.title ?? 'Select',
+        start: opts.start ?? '',
+        extensions: opts.extensions ?? [],
+      }),
+    }),
 
   // connectors + resources
   getStatus: () => request<StatusSnapshot>('/api/status'),
   testConnection: (kind: 'comfyui' | 'ollama') =>
     request<ConnTestResult>(`/api/connectors/${kind}/test`, { method: 'POST' }),
   freeComfyui: () => request<EngineActionResult>('/api/engine/comfyui/free', { method: 'POST' }),
+  launchComfyui: () => request<EngineLaunchResult>('/api/engine/comfyui/launch', { method: 'POST' }),
   unloadOllama: (model?: string) =>
     request<EngineActionResult>('/api/engine/ollama/unload', {
       method: 'POST',

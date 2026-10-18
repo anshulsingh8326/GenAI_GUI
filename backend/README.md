@@ -54,6 +54,7 @@ Everything the backend persists lives in `<repo>/data` (override with the
 | GET | `/api/settings/defaults` | shipped defaults - powers the per-field reset buttons |
 | POST | `/api/settings/reset` | reset settings.json to defaults (never touches files) |
 | POST | `/api/folders/validate` | check a typed folder path, optionally create it (`{ path, create }`) |
+| POST | `/api/folders/pick` | open the OS-native file/folder dialog **on the backend machine** (`{ mode, title, start, extensions }`) -> `{ path }` or `null` when cancelled. Browsers can't hand out real paths, hence the backend dialog |
 
 ## Group 2 endpoints (connectors + resources)
 
@@ -63,9 +64,11 @@ Everything the backend persists lives in `<repo>/data` (override with the
 | POST | `/api/connectors/{kind}/test` | on-demand connection test (`kind`: `comfyui` \| `ollama`) |
 | POST | `/api/engine/comfyui/free` | `POST /free` on ComfyUI - frees its cache, never loads anything |
 | POST | `/api/engine/ollama/unload` | `{"model": name}` or omitted for all - only ever targets models already in memory (`GET /api/ps`), so it can never cause a load |
+| POST | `/api/engine/comfyui/launch` | start the launcher (`.bat` / `.cmd` / `.exe`) saved in settings (`comfyuiLauncher`) in its own console window - like a double-click. Explicit user action only; nothing ever starts automatically |
 
 Safety rules live in `connectors/service.py`: probes are read-only, the unload
-path re-checks `/api/ps` before calling `keep_alive: 0`.
+path re-checks `/api/ps` before calling `keep_alive: 0`, and the launcher spawns
+exactly the file the user configured - no downloads, no installs, no auto-start.
 
 ## Group 3 endpoints (library + jobs)
 

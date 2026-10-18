@@ -22,6 +22,7 @@ const rows: { key: FolderKey; label: string; desc: string }[] = [
 ]
 
 const checking = ref<FolderKey | null>(null)
+const browsing = ref<FolderKey | null>(null)
 
 async function check(key: FolderKey) {
   checking.value = key
@@ -44,8 +45,25 @@ async function check(key: FolderKey) {
   }
 }
 
-function browse(label: string) {
-  ui.toast(`Native folder picker for "${label}" arrives with a later step - type the path and use Check.`)
+async function browse(key: FolderKey) {
+  browsing.value = key
+  try {
+    const res = await api.pickPath({
+      mode: 'folder',
+      title: `Select the ${key} folder`,
+      start: settings.folders[key],
+    })
+    if (res.path) settings.folders[key] = res.path
+  } catch (err) {
+    ui.toast(
+      err instanceof ApiError && err.isOffline
+        ? 'Backend offline - the folder dialog opens on the machine running the backend.'
+        : `Could not open the dialog: ${err instanceof Error ? err.message : 'unknown error'}`,
+      'warn',
+    )
+  } finally {
+    browsing.value = null
+  }
 }
 </script>
 
@@ -66,8 +84,9 @@ function browse(label: string) {
             Check
           </AppButton>
           <ResetButton :disabled="settings.isDefault(['folders', r.key])" @reset="settings.resetField(['folders', r.key])" />
-          <AppButton variant="ghost" @click="browse(r.label)">
-            <FolderOpen class="h-3.5 w-3.5" /> Browse...
+          <AppButton variant="ghost" :disabled="browsing === r.key" @click="browse(r.key)">
+            <LoaderCircle v-if="browsing === r.key" class="h-3.5 w-3.5 animate-spin" />
+            <FolderOpen v-else class="h-3.5 w-3.5" /> Browse...
           </AppButton>
         </div>
       </div>
