@@ -1,0 +1,8 @@
+{
+  "id": "template",
+  "name": "Template",
+  "group": "image",
+  "version": "0.1.0",
+  "description": "Copy of the GenModule template - not a real capability.",
+  "recipeIds": []
+}

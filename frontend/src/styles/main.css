@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   GenAI GUI — design tokens
+   Two themes (pastel dark / pastel light) + 4 pastel accents.
+   All colors are exposed to Tailwind as utilities (bg-surface, text-muted, …).
+--------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-border: var(--c-border);
+  --color-text: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-accent: var(--c-accent);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-contrast: var(--c-accent-contrast);
+  --color-success: var(--c-success);
+  --color-warn: var(--c-warn);
+  --color-danger: var(--c-danger);
+  --color-mint: var(--c-mint);
+  --color-lavender: var(--c-lavender);
+  --color-peach: var(--c-peach);
+  --color-sky: var(--c-sky);
+  --color-rose: var(--c-rose);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+}
+
+:root,
+:root[data-theme="pastel-dark"] {
+  --c-bg: #141221;
+  --c-surface: #1c1a2b;
+  --c-surface-2: #262338;
+  --c-border: #33304a;
+  --c-text: #eceaf6;
+  --c-muted: #a39ec2;
+  --c-success: #7fe0a7;
+  --c-warn: #f2c879;
+  --c-danger: #ff9db1;
+  --c-mint: #8fe6c0;
+  --c-lavender: #b8a7ee;
+  --c-peach: #ffc29e;
+  --c-sky: #9ecbff;
+  --c-rose: #ffb3c7;
+  --c-accent-contrast: #17141f;
+}
+
+:root[data-theme="pastel-light"] {
+  --c-bg: #f6f4fb;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0edf9;
+  --c-border: #e2ddf0;
+  --c-text: #2b2838;
+  --c-muted: #6f6a85;
+  --c-success: #3fa878;
+  --c-warn: #c78a1e;
+  --c-danger: #d9536f;
+  --c-mint: #2fa87a;
+  --c-lavender: #7f66e0;
+  --c-peach: #d97f4e;
+  --c-sky: #3d8fd6;
+  --c-rose: #e06a8a;
+  --c-accent-contrast: #ffffff;
+}
+
+/* accent choices — each theme has its own tuned shade */
+:root[data-theme="pastel-dark"][data-accent="lavender"] { --c-accent: #b8a7ee; }
+:root[data-theme="pastel-dark"][data-accent="mint"]     { --c-accent: #8fe6c0; }
+:root[data-theme="pastel-dark"][data-accent="peach"]    { --c-accent: #ffc29e; }
+:root[data-theme="pastel-dark"][data-accent="sky"]      { --c-accent: #9ecbff; }
+
+:root[data-theme="pastel-light"][data-accent="lavender"] { --c-accent: #7f66e0; }
+:root[data-theme="pastel-light"][data-accent="mint"]     { --c-accent: #2fa87a; }
+:root[data-theme="pastel-light"][data-accent="peach"]    { --c-accent: #d97f4e; }
+:root[data-theme="pastel-light"][data-accent="sky"]      { --c-accent: #3d8fd6; }
+
+:root {
+  --c-accent-soft: color-mix(in srgb, var(--c-accent) 16%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+
+body {
+  background-color: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--c-accent) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* transitions */
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from,
+.fade-leave-to { opacity: 0; }
+
+.toast-enter-active,
+.toast-leave-active { transition: all 0.2s ease; }
+.toast-enter-from,
+.toast-leave-to { opacity: 0; transform: translateY(6px); }
+
+/* alpha checkerboard used behind transparent-PNG previews (game assets) */
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--c-border) 55%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--c-border) 55%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--c-border) 55%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--c-border) 55%, transparent) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}

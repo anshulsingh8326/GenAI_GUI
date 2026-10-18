@@ -1,0 +1,410 @@
+{
+  "id": "krea2-bgremoval-gray",
+  "revision": 0,
+  "last_node_id": 7,
+  "last_link_id": 6,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [
+        -800,
+        -200
+      ],
+      "size": [
+        320,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "image"
+          }
+        },
+        {
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "link": null,
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "slot_index": 1,
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": [
+        "bgtest_source.png",
+        "image"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "LoadBackgroundRemovalModel",
+      "pos": [
+        -800,
+        200
+      ],
+      "size": [
+        320,
+        60
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_removal_name",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "bg_removal_name"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bg_model",
+          "type": "BACKGROUND_REMOVAL",
+          "slot_index": 0,
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadBackgroundRemovalModel",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": [
+        "model.safetensors"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "RemoveBackground",
+      "pos": [
+        -400,
+        0
+      ],
+      "size": [
+        280,
+        82
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_removal_model",
+          "type": "BACKGROUND_REMOVAL",
+          "link": 3
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "slot_index": 0,
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RemoveBackground",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "EmptyImage",
+      "pos": [
+        -400,
+        250
+      ],
+      "size": [
+        240,
+        126
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "batch_size",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "batch_size"
+          }
+        },
+        {
+          "name": "color",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "color"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1,
+        8421504
+      ]
+    },
+    {
+      "id": 5,
+      "type": "ImageCompositeMasked",
+      "pos": [
+        100,
+        0
+      ],
+      "size": [
+        300,
+        170
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "destination",
+          "type": "IMAGE",
+          "link": 5
+        },
+        {
+          "name": "source",
+          "type": "IMAGE",
+          "link": 2
+        },
+        {
+          "name": "x",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "x"
+          }
+        },
+        {
+          "name": "y",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "y"
+          }
+        },
+        {
+          "name": "resize_source",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "resize_source"
+          }
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ImageCompositeMasked",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": [
+        0,
+        0,
+        false
+      ]
+    },
+    {
+      "id": 6,
+      "type": "SaveImage",
+      "pos": [
+        500,
+        0
+      ],
+      "size": [
+        320,
+        270
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 6
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.60"
+      },
+      "widgets_values": [
+        "bg_removed_gray"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "MarkdownNote",
+      "pos": [
+        -800,
+        450
+      ],
+      "size": [
+        700,
+        560
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# Background Removal -> Neutral Gray Portrait Reference\n\nBiRefNet (core node) + gray composite. Run once per character, reuse the PNG.\n\n## Chain\nLoadImage -> LoadBackgroundRemovalModel (model.safetensors) -> RemoveBackground (mask) -> EmptyImage (gray, 8421504) -> ImageCompositeMasked (destination=gray, source=character, mask=BiRefNet mask) -> SaveImage\n\n## Custom backdrop color (EmptyImage node)\n- The EmptyImage color widget IS the custom color option - click the swatch in the UI to pick any backdrop.\n- Default 8421504 = 0x808080 = mid gray (validated).\n- Other useful values: white = 16777215 (0xFFFFFF), light gray = 15658734 (0xEEEEEE), dark gray = 6579300 (0x646464).\n- Keep width/height matched to your source image size.\n\n## Why GRAY, not transparent\n- Transparent PNGs load as BLACK backgrounds in ComfyUI. A black backdrop reads as a flat studio cue and drags the whole generation down (flat/cartoon-ish output).\n- Gray keeps the cutout's \"no environment to preserve\" benefit with none of the dark cue.\n- 8421504 = 0x808080 = mid gray. Set EmptyImage width/height to match your source image (1024x1024 for standard gens).\n\n## Usage\n- Pick your image in LoadImage (Choose file button), Queue.\n- Save the output into ComfyUI/input/, then select it in the main workflow's LoadImage node with Identity = Qwen.\n- A ready-made example already exists: input/reference_gray.png"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      1,
+      "IMAGE"
+    ],
+    [
+      2,
+      1,
+      0,
+      5,
+      1,
+      "IMAGE"
+    ],
+    [
+      3,
+      2,
+      0,
+      3,
+      0,
+      "BACKGROUND_REMOVAL"
+    ],
+    [
+      4,
+      3,
+      0,
+      5,
+      5,
+      "MASK"
+    ],
+    [
+      5,
+      4,
+      0,
+      5,
+      0,
+      "IMAGE"
+    ],
+    [
+      6,
+      5,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "definitions": {
+    "subgraphs": []
+  },
+  "config": {},
+  "extra": {
+    "frontendVersion": "1.47.12"
+  },
+  "version": 0.4
+}

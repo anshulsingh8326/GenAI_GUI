@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# python / backend
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# app data: settings.json, SQLite db, library folders - never committed
+data/
+
+# build output
+frontend/dist/
+
+# logs & env
+*.log
+.env
+.env.local
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
