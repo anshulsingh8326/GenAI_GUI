@@ -26,8 +26,9 @@ running in the background.
 
 - **Settings** - saved in `data\settings.json` (authoritative), every field has a reset
   button plus a "reset all" action. Connection profiles for ComfyUI and Ollama.
-- **Connections & resources** - live status pills in the top bar, GPU VRAM / RAM popover,
-  safe memory actions (the app never loads a model just to unload it).
+- **Connections & resources** - live status pills in the top bar; GPU VRAM / RAM popover
+  (VRAM via `nvidia-smi`, so it stays visible even with ComfyUI closed; falls back to
+  ComfyUI's own stats). Safe memory actions - the app never loads a model just to unload it.
 - **ComfyUI launcher** - point *Settings -> Connections* at your own ComfyUI start `.bat`
   (browse or paste). **Launch ComfyUI** opens it in its own terminal window - exactly like
   double-clicking it. When ComfyUI is offline, the Resources popover offers the same

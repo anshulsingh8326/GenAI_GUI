@@ -2,6 +2,7 @@ import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { ConnRuntime, LoadedModel, StatusSnapshot } from '@/types'
 import { api } from '@/lib/api'
+import { useSettingsStore } from './settings'
 import { useUiStore } from './ui'
 
 // Engine + resources: the live view of ComfyUI / Ollama / VRAM / RAM.
@@ -68,6 +69,8 @@ export const useEngineStore = defineStore('engine', () => {
   async function refresh() {
     try {
       applySnapshot(await api.getStatus())
+      // the backend is reachable - heal a settings sync that failed at boot
+      useSettingsStore().ensureSynced()
     } catch {
       comfy.connected = false
       comfy.detail = 'Backend unreachable - is it running?'

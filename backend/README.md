@@ -73,6 +73,12 @@ the GUI button, or once at backend boot when the opt-in `comfyuiLauncherAutoStar
 toggle is on (skipped when ComfyUI is already reachable; the spawn debounce
 covers dev `--reload` restarts).
 
+Hardware numbers in `GET /api/status`: VRAM prefers `nvidia-smi` (read-only,
+windowless) so it keeps working with ComfyUI closed and matches Windows Task
+Manager; it falls back to ComfyUI's device stats, then to "unknown". RAM comes
+from psutil. VRAM/RAM are shown in GiB (binary, like Task Manager); model file
+sizes stay decimal GB (`ollama list` convention).
+
 ## Group 3 endpoints (library + jobs)
 
 | Method | Path | Purpose |

@@ -72,7 +72,7 @@ export const api = {
   // settings
   getSettings: () => request<SettingsEnvelope>('/api/settings'),
   getSettingsDefaults: () => request<SettingsValues>('/api/settings/defaults'),
-  putSettings: (values: SettingsValues) =>
+  putSettings: (values: Partial<SettingsValues>) =>
     request<SettingsValues>('/api/settings', { method: 'PUT', body: JSON.stringify(values) }),
   resetSettings: () => request<SettingsValues>('/api/settings/reset', { method: 'POST' }),
 

@@ -1,4 +1,4 @@
-import { reactive, ref, watch } from 'vue'
+import { nextTick, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { ConnectionProfile, SettingsValues, SystemInfo } from '@/types'
 import { DEFAULT_PROMPTS } from '@/lib/fixtures'
@@ -290,6 +290,11 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function applyValues(v: SettingsValues) {
+    // remote data: the watcher below must not treat this hydration as a user edit
+    applyingRemote = true
+    void nextTick(() => {
+      applyingRemote = false
+    })
     if (Array.isArray(v.profiles) && v.profiles.length) {
       profiles.value = v.profiles.map((p) => ({
         id: p.id,
@@ -318,12 +323,40 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null
+  // JSON of the state we know the backend has. Pushes are diffs against this,
+  // so a stale tab can never wipe fields it has not touched.
+  let lastSyncedJson: string | null = null
+  // true while applyValues() hydrates from the backend (watcher must not read it as an edit)
+  let applyingRemote = false
+  // true while local edits have not reached settings.json yet - they win over late syncs
+  let userDirty = false
+
+  /** Top-level keys whose value differs from the last synced state. */
+  function changedFields(): Partial<SettingsValues> {
+    const current = snapshot() as unknown as Record<string, unknown>
+    const last: Record<string, unknown> = lastSyncedJson ? JSON.parse(lastSyncedJson) : {}
+    const diff: Record<string, unknown> = {}
+    for (const key of Object.keys(current)) {
+      if (JSON.stringify(current[key]) !== JSON.stringify(last[key])) diff[key] = current[key]
+    }
+    return diff as Partial<SettingsValues>
+  }
 
   async function pushSettings() {
     if (backendState.value !== 'live') return
+    const payload = changedFields()
+    if (!Object.keys(payload).length) {
+      userDirty = false // current state matches the backend - nothing to push
+      return
+    }
     saving.value = true
     try {
-      await api.putSettings(snapshot())
+      await api.putSettings(payload)
+      // remember exactly what the backend has now (merge only the keys we sent)
+      const base: Record<string, unknown> = lastSyncedJson ? JSON.parse(lastSyncedJson) : {}
+      Object.assign(base, payload)
+      lastSyncedJson = JSON.stringify(base)
+      userDirty = false
       lastError.value = null
     } catch (err) {
       backendState.value = 'offline'
@@ -340,8 +373,13 @@ export const useSettingsStore = defineStore('settings', () => {
     saveTimer = setTimeout(pushSettings, delayMs)
   }
 
-  /** Called once on app start (App.vue): pull settings + defaults from the backend. */
+  let syncing = false
+  let lastSyncAt = 0
+
+  /** Pull settings + defaults from the backend (app start, reconnect, tab focus). */
   async function syncFromBackend() {
+    if (syncing) return
+    syncing = true
     try {
       const [envelope, defaultsFromApi, info] = await Promise.all([
         api.getSettings(),
@@ -352,9 +390,16 @@ export const useSettingsStore = defineStore('settings', () => {
       systemInfo.value = info
       backendState.value = 'live'
       lastError.value = null
+      lastSyncAt = Date.now()
       if (envelope.initialized) {
-        // settings.json is authoritative
-        applyValues(envelope.values)
+        if (userDirty && lastSyncedJson) {
+          // unpushed local edits exist - they win; push them instead of pulling
+          scheduleSave(0)
+        } else {
+          // settings.json is authoritative
+          applyValues(envelope.values)
+          lastSyncedJson = JSON.stringify(snapshot())
+        }
       } else {
         // first run: push what the browser currently has into settings.json
         scheduleSave(0)
@@ -362,7 +407,14 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch (err) {
       backendState.value = 'offline'
       lastError.value = err instanceof Error ? err.message : 'Backend unreachable'
+    } finally {
+      syncing = false
     }
+  }
+
+  /** Cheap heal path: the engine poll calls this when the backend comes back. */
+  function ensureSynced() {
+    if (backendState.value !== 'live') void syncFromBackend()
   }
 
   /** Reset every setting to the shipped defaults (warn first - see SettingsPage). */
@@ -372,6 +424,8 @@ export const useSettingsStore = defineStore('settings', () => {
         const values = await api.resetSettings()
         applyValues(values)
         baseline.value = cloned(values)
+        lastSyncedJson = JSON.stringify(snapshot())
+        userDirty = false
         ui.toast('All settings reset to defaults', 'success')
         return
       } catch {
@@ -386,7 +440,10 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(
     [profiles, activeProfiles, defaults, folders, prompts, autoFreeVram, agentEnabled, agentToken, comfyuiLauncher, comfyuiLauncherAutoStart],
     () => {
-      localStorage.setItem(LS_KEY, JSON.stringify(snapshot()))
+      const json = JSON.stringify(snapshot())
+      if (localStorage.getItem(LS_KEY) !== json) localStorage.setItem(LS_KEY, json)
+      if (applyingRemote) return // hydration from the backend, not a user edit
+      userDirty = true
       scheduleSave()
     },
     { deep: true },
@@ -395,6 +452,26 @@ export const useSettingsStore = defineStore('settings', () => {
   // the connection URL must always mirror the active profile, no matter which
   // code path edited it (modal inputs, settings section, reset buttons)
   watch(profiles, syncConnectionUrls, { deep: true })
+
+  // Tab/instance freshness: another tab saved settings (storage event) or the
+  // window came back after being away - pull the authoritative copy. The diff
+  // push above makes this clobber-safe: untouched fields are never re-sent.
+  if (typeof window !== 'undefined') {
+    let crossTabTimer: ReturnType<typeof setTimeout> | null = null
+    window.addEventListener('storage', (e) => {
+      if (e.key !== LS_KEY) return
+      // the writer debounces its backend push (~400ms) - wait briefly so we
+      // pull the saved state instead of the pre-push one
+      if (crossTabTimer) clearTimeout(crossTabTimer)
+      crossTabTimer = setTimeout(() => void syncFromBackend(), 700)
+    })
+    window.addEventListener('focus', () => {
+      if (saveTimer || syncing) return
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (Date.now() - lastSyncAt > 15000) void syncFromBackend()
+    })
+  }
 
   syncConnectionUrls()
 
@@ -418,6 +495,7 @@ export const useSettingsStore = defineStore('settings', () => {
     lastError,
     // actions
     syncFromBackend,
+    ensureSynced,
     activeProfile,
     setActiveProfile,
     setProfileUrl,

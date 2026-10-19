@@ -40,8 +40,16 @@ def _short(err: Exception) -> str:
 
 
 def _gb(value) -> float | None:
+    """Decimal GB - used for model file sizes (matches `ollama list`)."""
     if isinstance(value, (int, float)) and value > 0:
         return round(float(value) / 1e9, 1)
+    return None
+
+
+def _gib(value) -> float | None:
+    """Binary GB (GiB) - used for VRAM/RAM, the same unit Task Manager shows."""
+    if isinstance(value, (int, float)) and value > 0:
+        return round(float(value) / (1024**3), 1)
     return None
 
 
@@ -106,8 +114,8 @@ async def comfy_status() -> dict:
     device = devices[0] if devices else {}
     version = system.get("comfyui_version")
     gpu_name = clean_device_name(str(device.get("name") or ""))
-    vram_total = _gb(device.get("vram_total"))
-    vram_free = _gb(device.get("vram_free"))
+    vram_total = _gib(device.get("vram_total"))
+    vram_free = _gib(device.get("vram_free"))
 
     running = pending = 0
     try:
@@ -189,23 +197,74 @@ async def ollama_status() -> dict:
 
 def ram_stats() -> dict:
     vm = psutil.virtual_memory()
-    return {"ramUsedGb": round(vm.used / 1e9, 1), "ramTotalGb": round(vm.total / 1e9, 1)}
+    # GiB (binary), so the numbers line up with Windows Task Manager (32 GB RAM -> 32.0).
+    return {"ramUsedGb": round(vm.used / (1024**3), 1), "ramTotalGb": round(vm.total / (1024**3), 1)}
+
+
+_smi_cache = {"at": None, "value": None}
+
+
+def nvidia_smi_stats(ttl_seconds: float = 2.5) -> dict | None:
+    """GPU name + VRAM via nvidia-smi - read-only, windowless, works with ComfyUI closed.
+
+    Returns None on machines without an NVIDIA driver. Cached briefly so several
+    open GUI tabs polling /api/status don't each spawn a process.
+    """
+    now = time.monotonic()
+    if _smi_cache["at"] is not None and now - _smi_cache["at"] < ttl_seconds:
+        return _smi_cache["value"]
+
+    value: dict | None = None
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total,memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        lines = (proc.stdout or "").strip().splitlines()
+        if proc.returncode == 0 and lines:
+            parts = [p.strip() for p in lines[0].split(",")]
+            if len(parts) >= 3:
+                total_mib = float(parts[1])
+                used_mib = float(parts[2])
+                value = {
+                    "name": parts[0],
+                    "totalGb": round(total_mib / 1024, 1),
+                    "usedGb": round(used_mib / 1024, 1),
+                    "freeGb": round(max(0.0, total_mib - used_mib) / 1024, 1),
+                }
+    except (OSError, subprocess.SubprocessError, ValueError):
+        value = None
+
+    _smi_cache["at"] = now
+    _smi_cache["value"] = value
+    return value
 
 
 async def status_snapshot() -> dict:
     """Everything the top bar + Resources popover need, in one round-trip."""
     comfy, ollama = await asyncio.gather(comfy_status(), ollama_status())
 
+    # VRAM: prefer nvidia-smi (closest to Task Manager's numbers and it keeps
+    # working while ComfyUI is closed); fall back to ComfyUI's device stats.
+    smi = nvidia_smi_stats()
+    vram_total = None
     vram_used = None
     if comfy["connected"] and comfy["vramTotalGb"] and comfy["vramFreeGb"] is not None:
+        vram_total = comfy["vramTotalGb"]
         vram_used = max(0.0, round(comfy["vramTotalGb"] - comfy["vramFreeGb"], 1))
+    if smi:
+        vram_total = smi["totalGb"]
+        vram_used = smi["usedGb"]
 
     return {
         "comfyui": comfy,
         "ollama": ollama,
         "resources": {
             "vramUsedGb": vram_used,
-            "vramTotalGb": comfy["vramTotalGb"],
+            "vramTotalGb": vram_total,
             **ram_stats(),
         },
     }

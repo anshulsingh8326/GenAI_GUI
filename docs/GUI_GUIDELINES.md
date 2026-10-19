@@ -153,7 +153,10 @@ Global habits:
 - `jobs` store: every run is a `JobRecord` with stages; result cards and the Jobs page read from it.
 - `library` store: all assets (seeded fixtures + generated). Gallery reads it.
 - `settings` store: connections / defaults / folders / prompts — localStorage key `genai.settings.v1`
-  in the exact shape of the future `settings.json`.
+  in the exact shape of the future `settings.json`. `settings.json` is authoritative: pushes are
+  **partial diffs of only the touched keys** (a stale tab can never wipe other fields) and unpushed
+  local edits always win over a late sync. The store re-syncs on reconnect (engine poll), tab focus
+  and cross-tab storage events - never send full snapshots.
 - `engine` store: GPU VRAM + system RAM + loaded models + unload actions + run accounting
   (`jobStarted()` / `jobFinished()`), which drives `engine.busy` and the top-bar queue pill.
   Every GUI run must report there (the mock runner does it today; keep the calls when the
@@ -173,7 +176,9 @@ Global habits:
   Top bar keeps: connections, queue, Resources, theme toggle, settings.
 - Pills: `h-8 shrink-0 rounded-full border border-border bg-surface px-3 text-xs`; hide on narrow
   widths with `hidden lg:flex` instead of letting the bar wrap.
-- The Resources popover is the single home of memory info: **GPU VRAM + System RAM bars**, loaded
+- The Resources popover is the single home of memory info: **GPU VRAM + System RAM bars**
+  (VRAM via `nvidia-smi` in GiB - the same numbers Windows Task Manager shows - falling back to
+  ComfyUI's device stats, so VRAM stays visible even with ComfyUI closed), loaded
   model lists (ComfyUI + Ollama) and unload actions (disabled while `engine.busy`).
 
 ## 8. Acceptance checklist for a new module session
