@@ -6,6 +6,8 @@ Prod: uv run uvicorn app.main:app --port 8766            (serves the built SPA f
 
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from . import APP_NAME, __version__
 from .api import api
 from .common import db, paths
+from .connectors.service import maybe_autostart_comfyui
 
 SPA_DIST = paths._REPO_ROOT / "frontend" / "dist"
 
@@ -46,11 +49,35 @@ def spa_media_type(path: Path) -> str:
     return SPA_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
+logger = logging.getLogger("uvicorn.error")  # uvicorn's configured logger - lands in the launch terminal
+
+
+def _autostart_comfyui() -> None:
+    """Opt-in boot step: run the user's ComfyUI launcher when the setting is enabled.
+
+    The service guards everything (skips when ComfyUI is already reachable,
+    debounces repeat spawns from --reload restarts). A failure here must never
+    stop the backend from booting.
+    """
+    try:
+        result = maybe_autostart_comfyui()
+        if result is not None:
+            logger.info("[comfyui] auto-start: %s", result["detail"])
+    except Exception as err:  # noqa: BLE001 - boot continues no matter what
+        logger.warning("[comfyui] auto-start failed: %s", err)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _autostart_comfyui()
+    yield
+
+
 def create_app() -> FastAPI:
     paths.ensure_base_dirs()
     db.init_db()
 
-    app = FastAPI(title=f"{APP_NAME} backend", version=__version__)
+    app = FastAPI(title=f"{APP_NAME} backend", version=__version__, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[

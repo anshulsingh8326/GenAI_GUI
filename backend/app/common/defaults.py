@@ -74,6 +74,7 @@ def default_settings() -> dict[str, Any]:
         "prompts": dict(DEFAULT_PROMPTS),
         "autoFreeVram": True,
         "comfyuiLauncher": "",  # optional .bat/.cmd/.exe that starts ComfyUI (Settings > Connections)
+        "comfyuiLauncherAutoStart": False,  # opt-in: start the launcher once at backend boot
         "agentEnabled": False,
         "agentToken": DEFAULT_AGENT_TOKEN,
     }

@@ -32,7 +32,9 @@ export const useEngineStore = defineStore('engine', () => {
     const parts: string[] = []
     if (activeJobs.value) parts.push(`${activeJobs.value} running`)
     if (queue.pending) parts.push(`${queue.pending} queued`)
-    return parts.join(' - ') || 'Queue idle'
+    // "Working" whenever something is in flight - the top bar must never read
+    // idle while the engine queue or a GUI-run job (engine.jobStarted) is active.
+    return parts.length ? `Working - ${parts.join(' - ')}` : 'Queue idle'
   })
 
   let pollTimer: ReturnType<typeof setInterval> | null = null

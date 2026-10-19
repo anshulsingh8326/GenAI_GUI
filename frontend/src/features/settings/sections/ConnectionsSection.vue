@@ -9,6 +9,7 @@ import Section from '@/components/ui/Section.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppInput from '@/components/ui/AppInput.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import ResetButton from '@/components/ui/ResetButton.vue'
 import ProfilesModal from '../components/ProfilesModal.vue'
@@ -117,7 +118,7 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
       <p class="text-xs font-medium">ComfyUI launcher (optional)</p>
       <p class="mb-2 text-[11px] leading-relaxed text-muted">
         Your own .bat that starts ComfyUI (e.g. run_nvidia_gpu.bat). Launch opens it in its own terminal window -
-        exactly like double-clicking it. Nothing runs automatically.
+        exactly like double-clicking it. The switch below can start it together with the app.
       </p>
       <div class="flex flex-wrap items-center gap-2">
         <div class="min-w-64 flex-1">
@@ -137,6 +138,17 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
           <Play v-else class="h-3.5 w-3.5" />
           Launch ComfyUI
         </AppButton>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+        <AppSwitch v-model="settings.comfyuiLauncherAutoStart" :disabled="!settings.comfyuiLauncher.trim()" />
+        <span class="text-xs" :class="settings.comfyuiLauncher.trim() ? 'text-text' : 'text-muted'">
+          Start it automatically when the app launches
+        </span>
+        <ResetButton
+          :disabled="settings.isDefault(['comfyuiLauncherAutoStart'])"
+          @reset="settings.resetField(['comfyuiLauncherAutoStart'])"
+        />
+        <span class="text-[11px] text-muted">skips when ComfyUI is already running</span>
       </div>
     </div>
     <p class="mt-3 flex items-start gap-2 rounded-xl border border-border bg-surface-2/40 p-3 text-xs leading-relaxed text-muted">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Boxes, Moon, Settings, Sun } from '@lucide/vue'
+import { Boxes, LoaderCircle, Moon, Settings, Sun } from '@lucide/vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import ResourcesPopover from './ResourcesPopover.vue'
 import { useUiStore } from '@/stores/ui'
@@ -51,9 +51,14 @@ function toggleTheme() {
       </span>
     </button>
 
-    <!-- queue -->
-    <div class="hidden h-8 shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-3 text-xs text-muted lg:flex">
-      <Boxes class="h-3.5 w-3.5" />
+    <!-- queue - live run status: "Working" while anything (engine queue or a GUI run) is active -->
+    <div
+      class="hidden h-8 shrink-0 items-center gap-2 rounded-full border bg-surface px-3 text-xs lg:flex"
+      :class="engine.busy ? 'border-accent/40 text-accent' : 'border-border text-muted'"
+      :title="engine.busy ? 'Jobs are running - open Jobs for progress' : 'No generation is running'"
+    >
+      <LoaderCircle v-if="engine.busy" class="h-3.5 w-3.5 animate-spin" />
+      <Boxes v-else class="h-3.5 w-3.5" />
       <span>{{ engine.queueLabel }}</span>
     </div>
 

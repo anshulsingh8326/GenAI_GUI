@@ -287,8 +287,10 @@ export interface SettingsValues {
   autoFreeVram: boolean
   agentEnabled: boolean
   agentToken: string
-  /** Optional .bat/.cmd/.exe that starts ComfyUI - launched only on explicit user action. */
+  /** Optional .bat/.cmd/.exe that starts ComfyUI - GUI button or opt-in boot auto-start. */
   comfyuiLauncher: string
+  /** Opt-in: start the launcher once at backend boot (skipped when ComfyUI is already reachable). */
+  comfyuiLauncherAutoStart: boolean
 }
 
 export interface SettingsEnvelope {

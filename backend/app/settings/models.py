@@ -50,5 +50,6 @@ class SettingsPayload(BaseModel):
     prompts: dict[str, str] | None = None
     autoFreeVram: bool | None = None
     comfyuiLauncher: str | None = None
+    comfyuiLauncherAutoStart: bool | None = None
     agentEnabled: bool | None = None
     agentToken: str | None = None

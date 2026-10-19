@@ -12,14 +12,16 @@ memory (`/api/ps`), so calling it can never cause a model to be loaded.
 from __future__ import annotations
 
 import asyncio
+import socket
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import psutil
 
-from app.common import settings_store
+from app.common import paths, settings_store
 
 from .comfyui import ComfyUIClient, clean_device_name
 from .ollama import OllamaClient
@@ -260,10 +262,11 @@ LAUNCHABLE_SUFFIXES = {".bat", ".cmd", ".exe"}
 def launch_comfyui() -> dict:
     """Start the user's ComfyUI launcher in a NEW console window (like a double-click).
 
-    Only ever runs on an explicit user action from the GUI - never at startup,
-    never from probes or agent tools. The path comes from Settings
-    (`comfyuiLauncher`); nothing is installed or downloaded, we literally start
-    the file the user chose, with its own folder as the working directory.
+    Runs from the explicit GUI action, or once at backend boot when the user
+    enabled auto-start (see `maybe_autostart_comfyui`). Never from probes or
+    agent tools. The path comes from Settings (`comfyuiLauncher`); nothing is
+    installed or downloaded, we literally start the file the user chose, with
+    its own folder as the working directory.
     """
     values, _ = settings_store.load()
     raw = str(values.get("comfyuiLauncher") or "").strip()
@@ -300,3 +303,70 @@ def launch_comfyui() -> dict:
         "path": str(path),
         "detail": "Launched in a new window - ComfyUI takes a moment to come up.",
     }
+
+
+# ----------------------------------------------------------------- auto-start
+
+_AUTOSTART_STAMP = paths.DATA_DIR / "comfyui_autostart.stamp"
+AUTOSTART_DEBOUNCE_SECONDS = 180
+
+
+def _host_port(url: str) -> tuple[str, int] | None:
+    try:
+        parsed = httpx.URL(url)
+    except Exception:  # noqa: BLE001 - malformed URL simply means "cannot probe"
+        return None
+    if not parsed.host:
+        return None
+    return parsed.host, parsed.port or (443 if parsed.scheme == "https" else 80)
+
+
+def comfyui_reachable(timeout: float = 0.4) -> bool:
+    """Cheap TCP check against the active ComfyUI profile - no HTTP request involved."""
+    address = _host_port(active_connection("comfyui")[0])
+    if not address:
+        return False
+    try:
+        with socket.create_connection(address, timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def maybe_autostart_comfyui() -> dict | None:
+    """Boot-time opt-in: start the saved launcher when `comfyuiLauncherAutoStart` is on.
+
+    Guarded so it can never spam windows: skipped when ComfyUI is already
+    reachable, and a fresh spawn stamp debounces quick restarts (uvicorn
+    --reload boots the app again on every code change). Returns None when the
+    setting is off, otherwise the launch result - main.py logs the detail.
+    """
+    values, _ = settings_store.load()
+    if not values.get("comfyuiLauncherAutoStart"):
+        return None
+
+    raw = str(values.get("comfyuiLauncher") or "").strip()
+    if not raw:
+        return {"started": False, "path": "", "detail": "auto-start is on, but no launcher path is set."}
+
+    if comfyui_reachable():
+        return {"started": False, "path": raw, "detail": "ComfyUI is already running - skipped."}
+
+    try:
+        stamp_age: float | None = time.time() - _AUTOSTART_STAMP.stat().st_mtime
+    except OSError:
+        stamp_age = None
+    if stamp_age is not None and stamp_age < AUTOSTART_DEBOUNCE_SECONDS:
+        return {
+            "started": False,
+            "path": raw,
+            "detail": f"launcher was started {int(stamp_age)}s ago - skipped (debounce).",
+        }
+
+    result = launch_comfyui()
+    if result["started"]:
+        try:
+            _AUTOSTART_STAMP.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+        except OSError:
+            pass  # stamp is best-effort - never fail the launch because of it
+    return result

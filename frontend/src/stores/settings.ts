@@ -48,6 +48,7 @@ function fallbackValues(): SettingsValues {
     agentEnabled: false,
     agentToken: 'genai_live_5f3c9a1e7b2d4f80',
     comfyuiLauncher: '',
+    comfyuiLauncherAutoStart: false,
   }
 }
 
@@ -76,6 +77,7 @@ function loadCache(): SettingsValues {
   if (typeof raw?.agentEnabled === 'boolean') fb.agentEnabled = raw.agentEnabled
   if (raw?.agentToken) fb.agentToken = raw.agentToken
   if (typeof raw?.comfyuiLauncher === 'string') fb.comfyuiLauncher = raw.comfyuiLauncher
+  if (typeof raw?.comfyuiLauncherAutoStart === 'boolean') fb.comfyuiLauncherAutoStart = raw.comfyuiLauncherAutoStart
   return fb
 }
 
@@ -107,6 +109,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const agentEnabled = ref(saved.agentEnabled)
   const agentToken = ref(saved.agentToken)
   const comfyuiLauncher = ref(saved.comfyuiLauncher)
+  const comfyuiLauncherAutoStart = ref(saved.comfyuiLauncherAutoStart)
 
   // -- sync + reset state ------------------------------------------------------
   const baseline = ref<SettingsValues>(fallbackValues())
@@ -202,6 +205,8 @@ export const useSettingsStore = defineStore('settings', () => {
         return agentToken.value
       case 'comfyuiLauncher':
         return comfyuiLauncher.value
+      case 'comfyuiLauncherAutoStart':
+        return comfyuiLauncherAutoStart.value
       default:
         return undefined
     }
@@ -241,6 +246,9 @@ export const useSettingsStore = defineStore('settings', () => {
       case 'comfyuiLauncher':
         comfyuiLauncher.value = value as string
         break
+      case 'comfyuiLauncherAutoStart':
+        comfyuiLauncherAutoStart.value = value as boolean
+        break
     }
   }
 
@@ -277,6 +285,7 @@ export const useSettingsStore = defineStore('settings', () => {
       agentEnabled: agentEnabled.value,
       agentToken: agentToken.value,
       comfyuiLauncher: comfyuiLauncher.value,
+      comfyuiLauncherAutoStart: comfyuiLauncherAutoStart.value,
     }
   }
 
@@ -305,6 +314,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (typeof v.agentEnabled === 'boolean') agentEnabled.value = v.agentEnabled
     if (typeof v.agentToken === 'string' && v.agentToken) agentToken.value = v.agentToken
     if (typeof v.comfyuiLauncher === 'string') comfyuiLauncher.value = v.comfyuiLauncher
+    if (typeof v.comfyuiLauncherAutoStart === 'boolean') comfyuiLauncherAutoStart.value = v.comfyuiLauncherAutoStart
   }
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -374,7 +384,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // cache locally always; push to the backend when it is live
   watch(
-    [profiles, activeProfiles, defaults, folders, prompts, autoFreeVram, agentEnabled, agentToken, comfyuiLauncher],
+    [profiles, activeProfiles, defaults, folders, prompts, autoFreeVram, agentEnabled, agentToken, comfyuiLauncher, comfyuiLauncherAutoStart],
     () => {
       localStorage.setItem(LS_KEY, JSON.stringify(snapshot()))
       scheduleSave()
@@ -400,6 +410,7 @@ export const useSettingsStore = defineStore('settings', () => {
     agentEnabled,
     agentToken,
     comfyuiLauncher,
+    comfyuiLauncherAutoStart,
     baseline,
     backendState,
     saving,

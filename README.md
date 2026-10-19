@@ -31,11 +31,13 @@ running in the background.
 - **ComfyUI launcher** - point *Settings -> Connections* at your own ComfyUI start `.bat`
   (browse or paste). **Launch ComfyUI** opens it in its own terminal window - exactly like
   double-clicking it. When ComfyUI is offline, the Resources popover offers the same
-  shortcut. Nothing ever starts automatically.
+  shortcut. A switch in the same section can start it automatically whenever the app
+  launches (off by default; skipped when ComfyUI is already running).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
   favorites, tags, search. Delete moves files to `data\trash` - **nothing is ever
   hard-deleted**.
-- **Jobs** - every run gets a backend id (`#142`, ...) with persisted stages and progress.
+- **Jobs** - every run gets a backend id (`#142`, ...) with persisted stages and progress; the
+  top-bar queue pill shows **Working** while anything is running, `Queue idle` otherwise.
 - **Folder browser** - folder fields have a real native "Browse..." dialog (the dialog
   opens on the machine running the backend).
 

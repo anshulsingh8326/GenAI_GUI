@@ -11,7 +11,9 @@ What to change after copying:
 - `schema.py` — request/response models for this module.
 - `service.py` — the pipeline stages: compose → submit → collect.
 - `api.py` — the thin router; mount it in `backend/app/api/__init__.py`.
-- GUI counterpart: `frontend/src/features/<module-id>/` (see `docs/GUI_GUIDELINES.md` §0).
+- GUI counterpart: `frontend/src/features/<module-id>/` (see `docs/GUI_GUIDELINES.md` §0) - every
+  run must report through the shared runner so the top-bar queue pill flips to **Working**
+  automatically (`docs/GUI_GUIDELINES.md` §7); never add a module-local busy indicator.
 
 Rules (full list in `docs/BACKEND_GUIDELINES.md`):
 

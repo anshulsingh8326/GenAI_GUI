@@ -17,8 +17,11 @@ modules feel like one product. If something here blocks a design, change this do
    state and model memory come for free.
 5. Mock-only actions: show a toast (`"... arrives with the backend session"`). Engine-dependent
    actions (unload, etc.) are disabled while `engine.busy`.
-6. Check light **and** dark theme, plus a narrow window width.
-7. `npm run build` (includes `vue-tsc`) must pass and the console must be clean before finishing.
+6. Report every run through the shared runner (`chat.send` -> `engine.jobStarted()` /
+   `jobFinished()`): the top-bar queue pill flips to **Working** by itself (§7). Never build
+   per-module busy pills or progress chips - the shell owns run status.
+7. Check light **and** dark theme, plus a narrow window width.
+8. `npm run build` (includes `vue-tsc`) must pass and the console must be clean before finishing.
 
 ---
 
@@ -151,7 +154,10 @@ Global habits:
 - `library` store: all assets (seeded fixtures + generated). Gallery reads it.
 - `settings` store: connections / defaults / folders / prompts — localStorage key `genai.settings.v1`
   in the exact shape of the future `settings.json`.
-- `engine` store: GPU VRAM + system RAM + loaded models + unload actions.
+- `engine` store: GPU VRAM + system RAM + loaded models + unload actions + run accounting
+  (`jobStarted()` / `jobFinished()`), which drives `engine.busy` and the top-bar queue pill.
+  Every GUI run must report there (the mock runner does it today; keep the calls when the
+  real pipeline replaces it).
 - `fixtures.ts` mirrors the real domain (Krea2 Freeze v8 values, LoRAs, presets). If the real
   workflow values change, update fixtures and note it in the session summary.
 - Persistence: settings + ui persist; chat threads are in-memory by design (mock phase).
@@ -159,6 +165,10 @@ Global habits:
 ## 7. Top bar conventions
 
 - Connection pills (green dot + "Connected") always navigate to `/settings?tab=connections`.
+- The **queue pill** is the single source of run status: `Queue idle` only when `engine.busy` is
+  false; while anything runs it reads `Working - n running - n queued` (accent color + spinner).
+  It is fed by the ComfyUI queue (status poll) plus `engine.jobStarted()/jobFinished()` from GUI
+  runs - modules must never add their own busy indicators.
 - **Do not** add status pills for anything the Resources popover already shows (GPU VRAM, RAM).
   Top bar keeps: connections, queue, Resources, theme toggle, settings.
 - Pills: `h-8 shrink-0 rounded-full border border-border bg-surface px-3 text-xs`; hide on narrow
