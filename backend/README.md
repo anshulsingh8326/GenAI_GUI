@@ -12,6 +12,7 @@ backend/app/
   common/            shared infrastructure: paths, defaults, settings.json store, SQLite
   settings/          settings service + pydantic models
   connectors/        ComfyUI + Ollama HTTP clients and the status snapshot service
+  engine_content/    ComfyUI folder inspection + per-module node/model audit (read-only)
   library/           asset store: files in data/library + rows, scans, thumbnails, placeholders
   jobs/              persistent job records (ids, stages, progress, results)
   mcp/               MCP server (stdio v0): thin tools over the same services
@@ -78,6 +79,23 @@ windowless) so it keeps working with ComfyUI closed and matches Windows Task
 Manager; it falls back to ComfyUI's device stats, then to "unknown". RAM comes
 from psutil. VRAM/RAM are shown in GiB (binary, like Task Manager); model file
 sizes stay decimal GB (`ollama list` convention).
+
+### ComfyUI content endpoints (read-only - Phase A)
+
+The app doesn't bundle ComfyUI: the user points `comfyuiFolder` at their own
+install and the app audits what each generation module needs
+(`docs/COMFYUI_CONTENT.md`). Nothing in this phase writes, downloads or executes.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/comfyui/inspect` | validate the configured folder (or `?path=` preview): flavor (portable / venv), python path, version, custom nodes (git origin + commit), per-category model file counts/sizes, and launcher-derived `suggestions` when no folder is set |
+| GET | `/api/comfyui/requirements` | `{ inspect, modules[] }` - every GenModule's `requirements.json` checked against the install (`installed: true \| false \| null`, optional items never block `ready`) |
+
+The audit matches nodes by folder name or normalized git origin, and models by
+filename under `models/<target>/` (plus size when the manifest declares one).
+Hashing 6 GB files on every poll isn't acceptable - sha256 is verified at
+download time in Phase C. Scan caps keep huge libraries fast (2000 files per
+category, 500 custom nodes).
 
 ## Group 3 endpoints (library + jobs)
 

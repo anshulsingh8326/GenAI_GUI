@@ -34,6 +34,11 @@ running in the background.
   double-clicking it. When ComfyUI is offline, the Resources popover offers the same
   shortcut. A switch in the same section can start it automatically whenever the app
   launches (off by default; skipped when ComfyUI is already running).
+- **ComfyUI content check** - point *Settings -> Connections* at your ComfyUI source folder
+  (the one with `main.py`; auto-detected from the launcher). *Settings -> Engine content*
+  then reports, per generation module, which custom nodes and model files are installed.
+  Read-only today - installers and verified downloads are the next phases
+  (`docs/COMFYUI_CONTENT.md`).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
   favorites, tags, search. Delete moves files to `data\trash` - **nothing is ever
   hard-deleted**.
@@ -94,6 +99,7 @@ Full structure: `docs/PLAN.md` §7.
 | --- | --- |
 | `docs/REQUIREMENTS.md` | the frozen product requirements |
 | `docs/PLAN.md` | architecture + the one-feature-per-step roadmap |
+| `docs/COMFYUI_CONTENT.md` | connect to a user's ComfyUI + manage custom nodes / models (phases A-D) |
 | `docs/PACKS.md` | ComfyUI workflow -> pack/recipe guide |
 | `docs/GUI_GUIDELINES.md` | frontend conventions for every new module |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |

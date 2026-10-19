@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { FolderOpen, LoaderCircle, Play, RefreshCw, ServerCog, MessageSquareText, SlidersHorizontal } from '@lucide/vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useEngineStore } from '@/stores/engine'
+import { useContentStore } from '@/stores/content'
 import { api, ApiError } from '@/lib/api'
 import { useUiStore } from '@/stores/ui'
 import Section from '@/components/ui/Section.vue'
@@ -42,6 +43,71 @@ async function browseLauncher() {
     browsingLauncher.value = false
   }
 }
+
+const content = useContentStore()
+const browsingFolder = ref(false)
+
+async function browseFolder() {
+  browsingFolder.value = true
+  try {
+    const res = await api.pickPath({
+      mode: 'folder',
+      title: 'Select the ComfyUI source folder (the one with main.py)',
+      start: settings.comfyuiFolder,
+    })
+    if (res.path) settings.comfyuiFolder = res.path
+  } catch (err) {
+    ui.toast(
+      err instanceof ApiError && err.isOffline
+        ? 'Backend offline - the folder dialog opens on the machine running the backend.'
+        : `Could not open the dialog: ${err instanceof Error ? err.message : 'unknown error'}`,
+      'warn',
+    )
+  } finally {
+    browsingFolder.value = false
+  }
+}
+
+const folderSet = computed(() => settings.comfyuiFolder.trim().length > 0)
+
+// Only trust a report that was made for the value currently in the field - a
+// stale scan (older folder) shows the "checking" state instead of wrong data.
+const folderReport = computed(() => {
+  const insp = content.inspect
+  if (!insp || !folderSet.value) return null
+  return insp.configured === settings.comfyuiFolder.trim() ? insp : null
+})
+
+const suggestion = computed(() => (folderSet.value ? '' : (content.inspect?.suggestions[0] ?? '')))
+
+const folderSummary = computed(() => {
+  const report = folderReport.value
+  if (!report?.valid) return ''
+  const flavor =
+    report.flavor === 'portable'
+      ? 'Portable install'
+      : report.flavor === 'venv'
+        ? 'Venv install'
+        : 'ComfyUI install'
+  const parts = [flavor]
+  if (report.version) parts.push(`v${report.version}`)
+  parts.push(`${report.customNodes.length} custom node${report.customNodes.length === 1 ? '' : 's'}`)
+  if (report.pythonPath) parts.push('Python found')
+  return parts.join(' \u00b7 ')
+})
+
+// The field saves ~400ms after the last keystroke - wait for that push, then
+// re-scan so the status line reflects the folder that is actually stored.
+let folderTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  [() => settings.comfyuiFolder, () => settings.comfyuiLauncher],
+  () => {
+    if (folderTimer) clearTimeout(folderTimer)
+    folderTimer = setTimeout(() => void content.refresh(), 700)
+  },
+)
+
+onMounted(() => void content.refresh())
 
 function onLauncherDrop(e: DragEvent) {
   const file = e.dataTransfer?.files?.[0] as (File & { path?: string }) | undefined
@@ -151,10 +217,54 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
         <span class="text-[11px] text-muted">skips when ComfyUI is already running</span>
       </div>
     </div>
+    <div class="mt-3 rounded-xl border border-dashed border-border p-3">
+      <p class="text-xs font-medium">ComfyUI folder (content management)</p>
+      <p class="mb-2 text-[11px] leading-relaxed text-muted">
+        The ComfyUI source folder - the one with main.py, custom_nodes and models. The app reads it to report which
+        module content (custom nodes, model files) is installed; see Settings &gt; Engine content. Read-only.
+      </p>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="min-w-64 flex-1">
+          <AppInput
+            v-model="settings.comfyuiFolder"
+            placeholder="e.g. D:\ComfyUI_windows_portable\ComfyUI"
+          />
+        </div>
+        <AppButton variant="ghost" :disabled="browsingFolder" @click="browseFolder">
+          <LoaderCircle v-if="browsingFolder" class="h-3.5 w-3.5 animate-spin" />
+          <FolderOpen v-else class="h-3.5 w-3.5" />
+          Browse...
+        </AppButton>
+        <ResetButton
+          :disabled="settings.isDefault(['comfyuiFolder'])"
+          @reset="settings.resetField(['comfyuiFolder'])"
+        />
+      </div>
+      <div v-if="folderSet" class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+        <template v-if="folderReport?.valid">
+          <StatusDot state="ok" />
+          <span class="text-success">{{ folderSummary }}</span>
+        </template>
+        <template v-else-if="folderReport?.error">
+          <StatusDot state="off" />
+          <span class="text-warn">{{ folderReport.error }}</span>
+        </template>
+        <template v-else>
+          <LoaderCircle class="h-3 w-3 animate-spin text-muted" />
+          <span class="text-muted">Checking the folder...</span>
+        </template>
+      </div>
+      <div v-else-if="suggestion" class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+        <span class="text-muted">Detected from your launcher:</span>
+        <code class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px]">{{ suggestion }}</code>
+        <AppButton variant="ghost" @click="settings.comfyuiFolder = suggestion">Use this folder</AppButton>
+      </div>
+      <p v-if="content.lastError" class="mt-2 text-[11px] text-warn">{{ content.lastError }}</p>
+    </div>
     <p class="mt-3 flex items-start gap-2 rounded-xl border border-border bg-surface-2/40 p-3 text-xs leading-relaxed text-muted">
       <ServerCog class="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
       The app probes version, GPU and VRAM on every refresh (top bar pills and the Resources popover are live).
-      Node-pack checks and feature gating arrive with the generation modules.
+      Custom node and model checks for installed generation modules live in Settings &gt; Engine content (read-only).
     </p>
   </Section>
 

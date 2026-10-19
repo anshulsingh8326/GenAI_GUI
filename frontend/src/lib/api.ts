@@ -7,6 +7,8 @@
 
 import type {
   Asset,
+  ComfyInspect,
+  ComfyRequirements,
   ConnTestResult,
   EngineActionResult,
   EngineLaunchResult,
@@ -105,6 +107,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ model: model ?? null }),
     }),
+
+  // comfyui content (read-only in Phase A - see docs/COMFYUI_CONTENT.md)
+  inspectComfy: (path?: string) =>
+    request<ComfyInspect>(`/api/comfyui/inspect${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  getComfyRequirements: () => request<ComfyRequirements>('/api/comfyui/requirements'),
 
   // library (assets)
   getAssets: (opts: { favorites?: boolean; q?: string; limit?: number } = {}) => {

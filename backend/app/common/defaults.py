@@ -75,6 +75,7 @@ def default_settings() -> dict[str, Any]:
         "autoFreeVram": True,
         "comfyuiLauncher": "",  # optional .bat/.cmd/.exe that starts ComfyUI (Settings > Connections)
         "comfyuiLauncherAutoStart": False,  # opt-in: start the launcher once at backend boot
+        "comfyuiFolder": "",  # ComfyUI source folder (main.py + custom_nodes + models) for content management
         "agentEnabled": False,
         "agentToken": DEFAULT_AGENT_TOKEN,
     }

@@ -15,6 +15,8 @@ Companion docs: `docs/GUI_GUIDELINES.md` (frontend counterpart) · `docs/PLAN.md
 
 1. Copy `backend/app/GenModules/_template/` to `backend/app/GenModules/<module-id>/`
    (e.g. `text-to-image`) and fill in `manifest.json`, `schema.py`, `service.py`, `api.py`.
+   If the module needs ComfyUI content, fill in `requirements.json` too
+   (custom nodes + model files; schema: `docs/COMFYUI_CONTENT.md` §2).
 2. Mount the router in `backend/app/api/__init__.py` under a clear prefix
    (`/api/<module-id>/...`). Routers stay thin — no logic in `api/`.
 3. Import only from `app.common`, `app.connectors` and the shared services
@@ -35,6 +37,7 @@ backend/app/
   common/            paths, defaults, settings.json store, SQLite, capability registry
   settings/          settings service + pydantic models
   connectors/        ComfyUI + Ollama clients + status snapshot service
+  engine_content/    ComfyUI folder inspection + per-module node/model audit (read-only)
   library/           asset store (files + rows, scans, thumbnails, trash)
   jobs/              persistent job records (ids, stages, progress, results)
   mcp/               MCP server (stdio v0) - thin tools over the same services
@@ -130,6 +133,11 @@ Everything lives under `<repo>/data` (override: `GENAI_DATA_DIR`):
   skips when ComfyUI is already reachable and debounces recent spawns (dev reloads).
   Never from probes or agent tools, and never anything other than the configured file.
 - **No hard deletes** anywhere in backend code; the Delete path is move-to-trash.
+- **Engine content inspection is read-only.** `app/engine_content` may list folders, read
+  `.git/config` / `.git/HEAD`, stats and filenames - never execute or import anything from
+  the ComfyUI folder, never write into it. Node installs / model downloads only arrive
+  behind an explicit GUI click with a confirmation and a streamed log
+  (`docs/COMFYUI_CONTENT.md` §7).
 - Paths coming from users/agents are validated before use (folder validation service);
   imports are size- and extension-guarded (`library/service.py`).
 - Remote exposure is opt-in only: localhost defaults, token for network transports, file

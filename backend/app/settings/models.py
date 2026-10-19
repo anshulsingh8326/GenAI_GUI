@@ -51,5 +51,6 @@ class SettingsPayload(BaseModel):
     autoFreeVram: bool | None = None
     comfyuiLauncher: str | None = None
     comfyuiLauncherAutoStart: bool | None = None
+    comfyuiFolder: str | None = None
     agentEnabled: bool | None = None
     agentToken: str | None = None

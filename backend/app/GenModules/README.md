@@ -13,6 +13,7 @@ backend/app/GenModules/<module-id>/
   api.py        # its REST router (thin - mounted in app/api/__init__.py)
   service.py    # its pipeline stages: compose -> submit -> collect
   schema.py     # request/response models specific to the module
+  requirements.json  # optional: custom nodes + model files the module needs
 ```
 
 ## Rules
@@ -24,6 +25,9 @@ backend/app/GenModules/<module-id>/
   instead of being copied between modules.
 - The GUI counterpart lives in `frontend/src/features/<module-id>/`, and its
   ComfyUI templates/packs live under `packs/` (see docs/PACKS.md).
+- If the module needs engine content (custom nodes, model files), ship a
+  `requirements.json` next to `manifest.json` - Settings > Engine content audits
+  it against the user's ComfyUI install (schema: docs/COMFYUI_CONTENT.md §2).
 - Nothing in Group 1 creates a module here yet; this README marks the spot and
   the naming decision.
 """

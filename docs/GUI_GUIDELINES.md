@@ -20,8 +20,12 @@ modules feel like one product. If something here blocks a design, change this do
 6. Report every run through the shared runner (`chat.send` -> `engine.jobStarted()` /
    `jobFinished()`): the top-bar queue pill flips to **Working** by itself (§7). Never build
    per-module busy pills or progress chips - the shell owns run status.
-7. Check light **and** dark theme, plus a narrow window width.
-8. `npm run build` (includes `vue-tsc`) must pass and the console must be clean before finishing.
+7. Engine content: if the module needs ComfyUI custom nodes / model files, the backend folder
+   ships a `requirements.json` - *Settings -> Engine content* audits it read-only against the
+   user's ComfyUI install (`docs/COMFYUI_CONTENT.md` §2). Don't duplicate that status in the
+   module page while the audit is read-only.
+8. Check light **and** dark theme, plus a narrow window width.
+9. `npm run build` (includes `vue-tsc`) must pass and the console must be clean before finishing.
 
 ---
 
@@ -38,7 +42,7 @@ frontend/src/
 │  └─ <module-id>/
 │     ├─ <Module>Page.vue   the route target
 │     └─ components/        pieces used ONLY by this module (e.g. T2I SessionBar)
-├─ stores/                  Pinia: ui, settings, engine, jobs, library, chat
+├─ stores/                  Pinia: ui, settings, engine, jobs, library, chat, content
 ├─ lib/                     api.ts (typed REST client), download.ts, nav.ts,
 │                           fixtures.ts, mockApi.ts, placeholder.ts, format.ts
 └─ router/                  routes
@@ -161,6 +165,10 @@ Global habits:
   (`jobStarted()` / `jobFinished()`), which drives `engine.busy` and the top-bar queue pill.
   Every GUI run must report there (the mock runner does it today; keep the calls when the
   real pipeline replaces it).
+- `content` store: read-only ComfyUI content audit (`GET /api/comfyui/inspect`,
+  `/requirements`). Settings -> Connections owns the `comfyuiFolder` field; Settings ->
+  Engine content renders the report. Never add install/download calls here until those
+  phases land - and they must stay explicit-click actions (`docs/COMFYUI_CONTENT.md`).
 - `fixtures.ts` mirrors the real domain (Krea2 Freeze v8 values, LoRAs, presets). If the real
   workflow values change, update fixtures and note it in the session summary.
 - Persistence: settings + ui persist; chat threads are in-memory by design (mock phase).

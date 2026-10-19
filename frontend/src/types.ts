@@ -291,6 +291,8 @@ export interface SettingsValues {
   comfyuiLauncher: string
   /** Opt-in: start the launcher once at backend boot (skipped when ComfyUI is already reachable). */
   comfyuiLauncherAutoStart: boolean
+  /** ComfyUI source folder (main.py + custom_nodes + models) for content management. */
+  comfyuiFolder: string
 }
 
 export interface SettingsEnvelope {
@@ -320,4 +322,78 @@ export interface SystemInfo {
   settingsInitialized: boolean
   dbFile: string
   dbTables: string[]
+}
+
+// -- ComfyUI content management (Phase A: read-only) ---------------------------
+
+export interface ComfyNodeInfo {
+  name: string
+  /** git origin when the node was cloned (null for zip/no-git installs) */
+  source: string | null
+  commit: string | null
+  disabled: boolean
+}
+
+export interface ComfyModelStat {
+  category: string
+  files: number
+  bytes: number
+}
+
+export interface ComfyInspect {
+  configured: string
+  path: string
+  valid: boolean
+  mainPy: boolean
+  flavor: 'portable' | 'venv' | 'unknown' | null
+  pythonPath: string | null
+  version: string | null
+  customNodesDir: string | null
+  modelsDir: string | null
+  customNodes: ComfyNodeInfo[]
+  customNodesTruncated: boolean
+  models: ComfyModelStat[]
+  extraModelPathsFile: boolean
+  /** ComfyUI source folders derived from the launcher (only when no folder is configured). */
+  suggestions: string[]
+  error: string | null
+}
+
+export interface ComfyRequirementNode {
+  name: string
+  repo: string
+  commit: string
+  optional: boolean
+  /** true/false = checked; null = no ComfyUI folder configured yet. */
+  installed: boolean | null
+  installedPath: string | null
+  installedCommit: string | null
+}
+
+export interface ComfyRequirementModel {
+  name: string
+  target: string
+  sizeBytes: number | null
+  optional: boolean
+  installed: boolean | null
+  path: string | null
+  sizeMatches: boolean | null
+}
+
+export interface ComfyModuleRequirements {
+  id: string
+  name: string
+  nodes: ComfyRequirementNode[]
+  models: ComfyRequirementModel[]
+  missingNodes: number
+  missingModels: number
+  /** false = no ComfyUI folder configured, nothing could be checked */
+  checked: boolean
+  ready: boolean
+  error: string | null
+}
+
+export interface ComfyRequirements {
+  inspect: ComfyInspect
+  modules: ComfyModuleRequirements[]
 }

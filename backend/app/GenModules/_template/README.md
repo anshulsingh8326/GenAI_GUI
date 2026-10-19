@@ -8,6 +8,10 @@ as an installed capability.
 What to change after copying:
 
 - `manifest.json` — id / name / group / description (+ recipe ids once packs land).
+- `requirements.json` — optional; the custom nodes + model files this module
+  needs. Settings > Engine content audits it read-only against the user's
+  ComfyUI install. Full schema: `docs/COMFYUI_CONTENT.md` §2 (delete the file
+  completely if the module needs nothing).
 - `schema.py` — request/response models for this module.
 - `service.py` — the pipeline stages: compose → submit → collect.
 - `api.py` — the thin router; mount it in `backend/app/api/__init__.py`.

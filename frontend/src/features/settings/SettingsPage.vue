@@ -13,6 +13,7 @@ import DefaultsSection from './sections/DefaultsSection.vue'
 import FoldersSection from './sections/FoldersSection.vue'
 import TextPromptsSection from './sections/TextPromptsSection.vue'
 import ResourcesSection from './sections/ResourcesSection.vue'
+import EngineContentSection from './sections/EngineContentSection.vue'
 import AgentSection from './sections/AgentSection.vue'
 
 const route = useRoute()
@@ -26,6 +27,7 @@ const tabs = [
   { id: 'folders', label: 'Folders' },
   { id: 'text', label: 'Text & Prompts' },
   { id: 'resources', label: 'Resources' },
+  { id: 'content', label: 'Engine content' },
   { id: 'agent', label: 'Agent Access' },
 ]
 
@@ -78,6 +80,7 @@ async function doResetAll() {
       <FoldersSection v-else-if="tab === 'folders'" />
       <TextPromptsSection v-else-if="tab === 'text'" />
       <ResourcesSection v-else-if="tab === 'resources'" />
+      <EngineContentSection v-else-if="tab === 'content'" />
       <AgentSection v-else-if="tab === 'agent'" />
     </div>
 
