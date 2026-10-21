@@ -338,6 +338,24 @@ export interface ComfyModelStat {
   category: string
   files: number
   bytes: number
+  items: ComfyModelFile[]
+  truncated: boolean
+}
+
+export interface ComfyModelFile {
+  /** path relative to the category folder, e.g. `subdir/model.safetensors` */
+  name: string
+  sizeBytes: number
+  /** best-effort kind from the header: image / video / lora / vae / text_encoder / ... */
+  kind: string
+  /** short architecture tag when known (qwen_image, mmdit, vae, llm, ...) */
+  arch: string | null
+  /** LoRA base model when the header declares one */
+  base: string | null
+  /** LoRA trigger words from training metadata */
+  triggers: string[]
+  /** set when the file sits in the wrong category (the app never moves it) */
+  suggestedCategory: string | null
 }
 
 export interface ComfyInspect {
@@ -364,6 +382,9 @@ export interface ComfyRequirementNode {
   repo: string
   commit: string
   optional: boolean
+  why: string
+  /** Python module for package-style installs (ComfyUI 0.30+ Manager), else "" */
+  package: string
   /** true/false = checked; null = no ComfyUI folder configured yet. */
   installed: boolean | null
   installedPath: string | null
@@ -375,9 +396,20 @@ export interface ComfyRequirementModel {
   target: string
   sizeBytes: number | null
   optional: boolean
+  why: string
   installed: boolean | null
   path: string | null
   sizeMatches: boolean | null
+}
+
+export interface ComfyCoreRequirements {
+  nodes: ComfyRequirementNode[]
+  models: ComfyRequirementModel[]
+  missingNodes: number
+  missingModels: number
+  /** false = no ComfyUI folder configured, nothing could be checked */
+  checked: boolean
+  ready: boolean
 }
 
 export interface ComfyModuleRequirements {
@@ -395,5 +427,7 @@ export interface ComfyModuleRequirements {
 
 export interface ComfyRequirements {
   inspect: ComfyInspect
+  /** shared baseline every module relies on (GGUF loader, recommended Manager, ...) */
+  core: ComfyCoreRequirements
   modules: ComfyModuleRequirements[]
 }

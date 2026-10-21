@@ -36,7 +36,9 @@ running in the background.
   launches (off by default; skipped when ComfyUI is already running).
 - **ComfyUI content check** - point *Settings -> Connections* at your ComfyUI source folder
   (the one with `main.py`; auto-detected from the launcher). *Settings -> Engine content*
-  then reports, per generation module, which custom nodes and model files are installed.
+  then reports the shared core baseline (GGUF loader required, Manager recommended), what
+  each generation module needs, and every model file grouped by what it generates (image /
+  video / LoRA / VAE / encoder) - kinds and LoRA triggers are read from file headers only.
   Read-only today - installers and verified downloads are the next phases
   (`docs/COMFYUI_CONTENT.md`).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,

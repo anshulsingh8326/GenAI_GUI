@@ -2,9 +2,12 @@
 
 Phase A is strictly read-only (docs/COMFYUI_CONTENT.md):
 - `inspect()` validates the configured folder, detects portable/venv installs,
-  finds the Python that would run pip, lists custom nodes and model stats.
-- `requirements()` checks every installed GenModule's `requirements.json`
-  against that install.
+  finds the Python that would run pip, lists custom nodes and model files.
+  Model files carry a best-effort `kind` (image / video / lora / vae / ...)
+  inferred from the safetensors / GGUF header - header bytes only, never a
+  full read.
+- `requirements()` checks the shared core baseline plus every installed
+  GenModule's `requirements.json` against that install.
 
 No writes, no downloads and no execution happen here - installs arrive in later
 phases behind explicit user clicks.
@@ -13,6 +16,7 @@ phases behind explicit user clicks.
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
 
 from app.common import capabilities, settings_store
@@ -37,7 +41,51 @@ MODEL_CATEGORIES = [
 
 # Scan caps - a huge library must never make a status poll slow.
 MAX_FILES_PER_CATEGORY = 2000
+MAX_MODEL_FILES = 400  # entries returned to the GUI
 MAX_CUSTOM_NODES = 500
+ST_HEADER_LIMIT = 4 * 1024 * 1024  # safetensors headers are KBs; skip monsters
+GGUF_MAX_KEYS = 64
+
+# Intrinsic category -> kind. Diffusion categories (checkpoints, unet, ...) are
+# inferred per file from the header/filename instead.
+CATEGORY_KINDS = {
+    "loras": "lora",
+    "vae": "vae",
+    "text_encoders": "text_encoder",
+    "clip": "text_encoder",
+    "clip_vision": "clip_vision",
+    "controlnet": "controlnet",
+    "upscale_models": "upscaler",
+    "embeddings": "embedding",
+    "model_patches": "model_patch",
+}
+
+# Where a kind is allowed to live. A mismatch is reported as a suggestion
+# (`suggestedCategory`) - the app never moves files by itself.
+ALLOWED_CATEGORIES = {
+    "image": {"checkpoints", "diffusion_models", "unet"},
+    "video": {"checkpoints", "diffusion_models", "unet"},
+    "text_encoder": {"text_encoders", "clip"},
+    "vae": {"vae"},
+    "lora": {"loras"},
+    "upscaler": {"upscale_models"},
+    "clip_vision": {"clip_vision"},
+    "controlnet": {"controlnet"},
+}
+CANONICAL_CATEGORY = {
+    "image": "diffusion_models",
+    "video": "diffusion_models",
+    "text_encoder": "text_encoders",
+    "vae": "vae",
+    "lora": "loras",
+    "upscaler": "upscale_models",
+    "clip_vision": "clip_vision",
+    "controlnet": "controlnet",
+}
+
+# Parsed header cache: (path, mtime_ns, size) -> compact info. Keeps repeated
+# audits cheap without caching file contents.
+_HEADER_CACHE: dict[tuple[str, int, int], dict] = {}
 
 
 # -- settings -------------------------------------------------------------------
@@ -96,7 +144,7 @@ def inspect(folder: str | None = None) -> dict:
         "modelsDir": None,
         "customNodes": [],
         "customNodesTruncated": False,
-        "models": [],  # [{ category, files, bytes }]
+        "models": [],  # [{ category, files, bytes, items[] }]
         "extraModelPathsFile": False,
         "suggestions": suggest_folder() if not configured else [],
         "error": None,
@@ -150,7 +198,7 @@ def inspect(folder: str | None = None) -> dict:
         report["customNodes"], report["customNodesTruncated"] = _list_custom_nodes(nodes_dir)
     if models_dir.is_dir():
         report["modelsDir"] = str(models_dir)
-        report["models"] = _model_stats(models_dir)
+        report["models"] = _model_inventory(models_dir)
     report["extraModelPathsFile"] = (root / "extra_model_paths.yaml").is_file()
     return report
 
@@ -227,29 +275,307 @@ def _git_commit(repo: Path) -> str | None:
     return head[:12] or None
 
 
-def _model_stats(models_dir: Path) -> list[dict]:
+def _model_inventory(models_dir: Path) -> list[dict]:
+    """Per-category model files with a best-effort kind/architecture.
+
+    Header parsing is read-only and bounded (safetensors: 8-byte length + the
+    JSON header; GGUF: scalar metadata keys). Unknown files simply stay
+    `kind: unknown` - never guessed from extension alone.
+    """
     stats: list[dict] = []
+    budget = MAX_MODEL_FILES
     for category in MODEL_CATEGORIES:
         folder = models_dir / category
         if not folder.is_dir():
             continue
         files = 0
         total = 0
+        items: list[dict] = []
+        truncated = False
         try:
-            for entry in folder.rglob("*"):
-                if files >= MAX_FILES_PER_CATEGORY:
-                    break
-                if entry.is_file():
-                    files += 1
-                    try:
-                        total += entry.stat().st_size
-                    except OSError:
-                        continue
+            entries = sorted(folder.rglob("*"))
         except OSError:
             continue
+        for entry in entries:
+            if files >= MAX_FILES_PER_CATEGORY:
+                truncated = True
+                break
+            if not entry.is_file() or entry.name.startswith("."):
+                continue
+            try:
+                size = entry.stat().st_size
+            except OSError:
+                continue
+            if size <= 0:
+                continue  # stock "put_*_here" placeholders
+            files += 1
+            total += size
+            if budget <= 0:
+                truncated = True
+                continue
+            budget -= 1
+            items.append(_model_item(entry, category, entry.relative_to(folder).as_posix(), size))
         if files:
-            stats.append({"category": category, "files": files, "bytes": total})
+            stats.append(
+                {
+                    "category": category,
+                    "files": files,
+                    "bytes": total,
+                    "items": items,
+                    "truncated": truncated,
+                }
+            )
     return stats
+
+
+def _model_item(path: Path, category: str, rel_name: str, size: int) -> dict:
+    suffix = path.suffix.lower()
+    info: dict = {}
+    if suffix == ".safetensors":
+        info = _inspect_safetensors(path, size)
+    elif suffix == ".gguf":
+        info = _inspect_gguf(path, size)
+
+    arch = str(info.get("arch") or "")
+    kind = CATEGORY_KINDS.get(category) or _kind_from_arch(arch, path.name)
+    return {
+        "name": rel_name,
+        "sizeBytes": size,
+        "kind": kind,
+        "arch": arch or None,
+        "base": info.get("base"),
+        "triggers": info.get("triggers") or [],
+        "suggestedCategory": _suggest_category(kind, category),
+    }
+
+
+def _kind_from_arch(arch: str, filename: str) -> str:
+    """Classify a diffusion file: image / video / text encoder / unknown."""
+    text = f"{arch} {filename}".lower()
+    if any(
+        token in text
+        for token in (
+            "minimax",
+            "wan2",
+            "wan_",
+            "wan-",
+            "ltx",
+            "hunyuanvideo",
+            "hunyuan_video",
+            "mochi",
+            "cogvideo",
+            "svd",
+        )
+    ):
+        return "video"
+    if "audio" in text:
+        return "audio"
+    if any(token in text for token in ("qwen3vl", "qwen3", "llama", "gemma", "t5", "llm", "text_encoder")):
+        return "text_encoder"
+    if any(
+        token in text
+        for token in (
+            "qwen_image",
+            "qwen-image",
+            "flux",
+            "krea",
+            "sdxl",
+            "sd15",
+            "sd3",
+            "z_image",
+            "chroma",
+            "hidream",
+            "pixart",
+            "kolors",
+        )
+    ):
+        return "image"
+    return "unknown"
+
+
+def _suggest_category(kind: str, category: str) -> str | None:
+    allowed = ALLOWED_CATEGORIES.get(kind)
+    if allowed and category not in allowed:
+        return CANONICAL_CATEGORY.get(kind)
+    return None
+
+
+def _cached_header(key: tuple[str, int, int]) -> dict | None:
+    return _HEADER_CACHE.get(key)
+
+
+def _store_header(key: tuple[str, int, int], info: dict) -> dict:
+    if len(_HEADER_CACHE) > 4000:
+        _HEADER_CACHE.clear()
+    _HEADER_CACHE[key] = info
+    return info
+
+
+def _inspect_safetensors(path: Path, size: int) -> dict:
+    try:
+        key = (str(path), path.stat().st_mtime_ns, size)
+    except OSError:
+        return {}
+    cached = _cached_header(key)
+    if cached is not None:
+        return cached
+
+    info: dict = {}
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read(8)
+            if len(raw) == 8:
+                header_len = struct.unpack("<Q", raw)[0]
+                if 0 < header_len <= ST_HEADER_LIMIT:
+                    header = json.loads(fh.read(header_len).decode("utf-8", errors="replace"))
+                    if isinstance(header, dict):
+                        meta = header.get("__metadata__") or {}
+                        if not isinstance(meta, dict):
+                            meta = {}
+                        keys = [k for k in header.keys() if k != "__metadata__"]
+                        info = {
+                            "arch": _guess_arch(keys, meta),
+                            "base": _lora_base(meta),
+                            "triggers": _lora_triggers(meta),
+                        }
+    except (OSError, ValueError, struct.error):
+        info = {}
+    return _store_header(key, info)
+
+
+def _guess_arch(keys: list[str], meta: dict) -> str:
+    """Short architecture tag from metadata / tensor naming."""
+    spec = str(meta.get("modelspec.architecture") or "").strip().lower()
+    if spec:
+        return spec
+    joined = "\n".join(keys[:500]).lower()
+    if "lora_" in joined or "lora_down" in joined or "lora_a" in joined or "lora_up" in joined:
+        return "lora"
+    if "joint_blocks." in joined:
+        return "sd3"
+    if "double_blocks." in joined and "single_blocks." in joined:
+        return "mmdit"
+    if "model.diffusion_model." in joined:
+        return "sd"
+    if "encoder.down_blocks" in joined and "decoder.up_blocks" in joined:
+        return "vae"
+    if "control_model." in joined:
+        return "controlnet"
+    if "vision_model." in joined:
+        return "clip_vision"
+    if "model.layers." in joined and "embed_tokens" in joined:
+        return "llm"
+    if "text_model." in joined or "cond_stage_model." in joined:
+        return "text_encoder"
+    if "patch_embedding" in joined and "blocks." in joined:
+        return "transformer"
+    if "down_blocks" in joined and "up_blocks" in joined:
+        return "unet"
+    return ""
+
+
+def _lora_base(meta: dict) -> str | None:
+    base = str(meta.get("ss_base_model_version") or "").strip()
+    if base:
+        return base
+    spec = str(meta.get("modelspec.architecture") or "").strip().lower()
+    if "/" in spec:
+        prefix = spec.split("/", 1)[0].strip()
+        return prefix or None
+    return None
+
+
+def _lora_triggers(meta: dict) -> list[str]:
+    """Top trigger words from kohya's `ss_tag_frequency` metadata."""
+    raw = meta.get("ss_tag_frequency")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    counts: dict[str, int] = {}
+    for words in data.values():
+        if not isinstance(words, dict):
+            continue
+        for word, count in words.items():
+            if not isinstance(word, str) or not word.strip():
+                continue
+            try:
+                n = int(count)
+            except (TypeError, ValueError):
+                n = 0
+            counts[word.strip()] = counts.get(word.strip(), 0) + n
+    return [word for word, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:8]]
+
+
+def _inspect_gguf(path: Path, size: int) -> dict:
+    """Read scalar GGUF metadata keys (architecture/name) - no tensor data."""
+    try:
+        key = (str(path), path.stat().st_mtime_ns, size)
+    except OSError:
+        return {}
+    cached = _cached_header(key)
+    if cached is not None:
+        return cached
+
+    info: dict = {}
+    interesting = {"general.architecture", "general.name", "general.size_label", "general.type"}
+    scalar_sizes = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+    try:
+        with open(path, "rb") as fh:
+            if fh.read(4) != b"GGUF":
+                return _store_header(key, info)
+            fh.read(4)  # version
+            fh.read(8)  # tensor count
+            kv_count = struct.unpack("<Q", fh.read(8))[0]
+
+            def read_str() -> str:
+                length = struct.unpack("<Q", fh.read(8))[0]
+                if length > 1_000_000:  # corrupt/hostile guard
+                    fh.seek(length, 1)
+                    return ""
+                return fh.read(length).decode("utf-8", errors="replace")
+
+            for _ in range(min(kv_count, GGUF_MAX_KEYS)):
+                name = read_str()
+                vtype = struct.unpack("<I", fh.read(4))[0]
+                if vtype == 8:
+                    value = read_str()
+                    if name in interesting:
+                        info[name] = value
+                elif vtype in scalar_sizes:
+                    raw = fh.read(scalar_sizes[vtype])
+                    if name in interesting:
+                        if vtype == 7:
+                            info[name] = raw != b"\x00"
+                        elif vtype in (6, 12):
+                            info[name] = struct.unpack("<f" if vtype == 6 else "<d", raw)[0]
+                        else:
+                            info[name] = int.from_bytes(raw, "little", signed=vtype in (1, 3, 5, 11))
+                elif vtype == 9:
+                    subtype = struct.unpack("<I", fh.read(4))[0]
+                    count = struct.unpack("<Q", fh.read(8))[0]
+                    if subtype == 8:
+                        for _i in range(count):
+                            length = struct.unpack("<Q", fh.read(8))[0]
+                            fh.seek(length, 1)
+                    elif subtype in scalar_sizes:
+                        fh.seek(scalar_sizes[subtype] * count, 1)
+                    else:
+                        break
+                else:
+                    break
+    except (OSError, struct.error):
+        info = {}
+
+    result = {
+        "arch": str(info.get("general.architecture") or ""),
+        "name": str(info.get("general.name") or ""),
+    }
+    return _store_header(key, result)
 
 
 # -- requirement audit ----------------------------------------------------------
@@ -279,12 +605,61 @@ def _module_name(folder: Path) -> str:
     return folder.name
 
 
+CORE_REQUIREMENTS_FILE = Path(__file__).with_name("core_requirements.json")
+
+
+def _load_core() -> dict:
+    try:
+        raw = json.loads(CORE_REQUIREMENTS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _audit_block(
+    raw: object,
+    valid: bool,
+    installed_nodes: list[dict],
+    models_dir: Path | None,
+    package_dirs: list[Path] | None = None,
+) -> tuple[list[dict], list[dict], int, int]:
+    raw_nodes = raw.get("nodes") if isinstance(raw, dict) else None
+    raw_models = raw.get("models") if isinstance(raw, dict) else None
+    nodes = [_check_node(item) for item in raw_nodes] if isinstance(raw_nodes, list) else []
+    models = [_check_model(item) for item in raw_models] if isinstance(raw_models, list) else []
+
+    # Fill install state now that we have the engine's content.
+    for node in nodes:
+        if valid:
+            _match_node(node, installed_nodes, package_dirs)
+    for model in models:
+        if models_dir is not None:
+            _match_model(model, models_dir)
+
+    missing_nodes = sum(1 for node in nodes if node["installed"] is False and not node["optional"])
+    missing_models = sum(1 for model in models if model["installed"] is False and not model["optional"])
+    return nodes, models, missing_nodes, missing_models
+
+
 def requirements() -> dict:
-    """Audit every installed module's requirements against the configured folder."""
+    """Audit the core baseline + every installed module's requirements."""
     report = inspect()
     valid = bool(report["valid"])
     installed_nodes = report["customNodes"] if valid else []
     models_dir = Path(report["modelsDir"]) if report.get("modelsDir") else None
+    package_dirs = _site_packages_dirs(report.get("pythonPath"))
+
+    core_nodes, core_models, core_missing_nodes, core_missing_models = _audit_block(
+        _load_core(), valid, installed_nodes, models_dir, package_dirs
+    )
+    core = {
+        "nodes": core_nodes,
+        "models": core_models,
+        "missingNodes": core_missing_nodes,
+        "missingModels": core_missing_models,
+        "checked": valid,
+        "ready": valid and core_missing_nodes == 0 and core_missing_models == 0,
+    }
 
     modules: list[dict] = []
     for folder in _module_folders():
@@ -306,21 +681,9 @@ def requirements() -> dict:
             )
             continue
 
-        raw_nodes = raw.get("nodes") if isinstance(raw, dict) else None
-        raw_models = raw.get("models") if isinstance(raw, dict) else None
-        nodes = [_check_node(item) for item in raw_nodes] if isinstance(raw_nodes, list) else []
-        models = [_check_model(item) for item in raw_models] if isinstance(raw_models, list) else []
-
-        # Fill install state now that we have the engine's content.
-        for node in nodes:
-            if valid:
-                _match_node(node, installed_nodes)
-        for model in models:
-            if models_dir is not None:
-                _match_model(model, models_dir)
-
-        missing_nodes = sum(1 for node in nodes if node["installed"] is False and not node["optional"])
-        missing_models = sum(1 for model in models if model["installed"] is False and not model["optional"])
+        nodes, models, missing_nodes, missing_models = _audit_block(
+            raw, valid, installed_nodes, models_dir, package_dirs
+        )
         modules.append(
             {
                 "id": folder.name,
@@ -335,7 +698,7 @@ def requirements() -> dict:
             }
         )
 
-    return {"inspect": report, "modules": modules}
+    return {"inspect": report, "core": core, "modules": modules}
 
 
 def _check_node(raw: object) -> dict:
@@ -348,6 +711,8 @@ def _check_node(raw: object) -> dict:
         "repo": repo,
         "commit": commit,
         "optional": bool(item.get("optional")),
+        "why": str(item.get("why") or ""),
+        "package": str(item.get("package") or ""),
         "installed": None,
         "installedPath": None,
         "installedCommit": None,
@@ -364,7 +729,7 @@ def _normalize_repo(url: str) -> str:
     return normalized
 
 
-def _match_node(node: dict, installed: list[dict]) -> None:
+def _match_node(node: dict, installed: list[dict], package_dirs: list[Path] | None = None) -> None:
     wanted_repo = _normalize_repo(node["repo"]) if node["repo"] else ""
     wanted_name = node["name"].lower()
     for entry in installed:
@@ -374,7 +739,47 @@ def _match_node(node: dict, installed: list[dict]) -> None:
             node["installedPath"] = entry["name"]
             node["installedCommit"] = entry.get("commit")
             return
+
+    # ComfyUI 0.30+ ships Manager as a Python package (`comfyui_manager`), not a
+    # custom_nodes folder. An optional `package` field covers that install style.
+    package = node.get("package") or ""
+    if package and package_dirs:
+        for site in package_dirs:
+            if (site / package / "__init__.py").is_file():
+                node["installed"] = True
+                node["installedPath"] = str(site / package)
+                return
+            if any(site.glob(f"{package}-*.dist-info")):
+                node["installed"] = True
+                node["installedPath"] = str(site)
+                return
+
     node["installed"] = False
+
+
+def _site_packages_dirs(python_path: str | None) -> list[Path]:
+    """site-packages candidates for both portable and venv layouts (read-only)."""
+    if not python_path:
+        return []
+    exe = Path(python_path)
+    roots = {exe.parent, exe.parent.parent}
+    candidates: list[Path] = [root / "Lib" / "site-packages" for root in roots]
+    for root in roots:
+        try:
+            candidates.extend(root.glob("lib/python*/site-packages"))
+        except OSError:
+            continue
+
+    result: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_dir():
+            result.append(candidate)
+    return result
 
 
 def _check_model(raw: object) -> dict:
@@ -387,6 +792,7 @@ def _check_model(raw: object) -> dict:
         "target": target,
         "sizeBytes": int(size) if isinstance(size, (int, float)) and size > 0 else None,
         "optional": bool(item.get("optional")),
+        "why": str(item.get("why") or ""),
         "installed": None,
         "path": None,
         "sizeMatches": None,

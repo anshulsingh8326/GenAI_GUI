@@ -88,8 +88,8 @@ install and the app audits what each generation module needs
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/comfyui/inspect` | validate the configured folder (or `?path=` preview): flavor (portable / venv), python path, version, custom nodes (git origin + commit), per-category model file counts/sizes, and launcher-derived `suggestions` when no folder is set |
-| GET | `/api/comfyui/requirements` | `{ inspect, modules[] }` - every GenModule's `requirements.json` checked against the install (`installed: true \| false \| null`, optional items never block `ready`) |
+| GET | `/api/comfyui/inspect` | validate the configured folder (or `?path=` preview): flavor (portable / venv), python path, version, custom nodes (git origin + commit), per-category model files with header-derived `kind` / `arch` (and LoRA `base` + `triggers`), and launcher-derived `suggestions` when no folder is set |
+| GET | `/api/comfyui/requirements` | `{ inspect, core, modules[] }` - the shared core baseline (`ComfyUI-GGUF` required, `ComfyUI-Manager` recommended) plus every GenModule's `requirements.json` checked against the install (`installed: true \| false \| null`, optional items never block `ready`) |
 
 The audit matches nodes by folder name or normalized git origin, and models by
 filename under `models/<target>/` (plus size when the manifest declares one).

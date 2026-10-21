@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {
+      "name": "ComfyUI-GGUF",
+      "repo": "https://github.com/city96/ComfyUI-GGUF",
+      "why": "Loads GGUF diffusion models and text encoders. Required by the GGUF variants of the image and video modules.",
+      "optional": false
+    },
+    {
+      "name": "ComfyUI-Manager",
+      "repo": "https://github.com/ltdrdata/ComfyUI-Manager",
+      "package": "comfyui_manager",
+      "why": "Recommended for updates, snapshots and a clean restart. ComfyUI 0.30+ ships it as a Python package, so the audit checks site-packages as well as the legacy custom_nodes folder.",
+      "optional": true
+    }
+  ],
+  "models": []
+}
