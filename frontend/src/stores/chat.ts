@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { imageModels } from '@/lib/fixtures'
 import { placeholderImage } from '@/lib/placeholder'
 import { runJob } from '@/lib/mockApi'
+import { useCatalogStore } from './catalog'
 import { useEngineStore } from './engine'
 import { useJobsStore } from './jobs'
 import { useLibraryStore } from './library'
@@ -58,10 +59,7 @@ function createThread(defaultModelId: string): Thread {
       height: 1024,
       batch: 2,
       enhance: false,
-      loras: [
-        { id: 'xcreampiex-krea2', strength: 1.0, on: true },
-        { id: 'realism-engine-krea2', strength: 0.6, on: true },
-      ],
+      loras: [],
       advanced: defaultAdvanced(defaultModelId),
     },
   }
@@ -72,6 +70,7 @@ export const useChatStore = defineStore('chat', () => {
   const jobs = useJobsStore()
   const library = useLibraryStore()
   const engine = useEngineStore()
+  const catalog = useCatalogStore()
   const ui = useUiStore()
 
   const threads = reactive<Record<string, Thread>>({})
@@ -178,7 +177,10 @@ export const useChatStore = defineStore('chat', () => {
     const prompt = (text ?? t.composer.text).trim()
     if (!prompt) return
 
+    await catalog.ensureLoaded()
     const snapshot = clone(t.composer)
+    const activeLoras = snapshot.loras.filter((lora) => lora.on).map((lora) => lora.id)
+    const jobPrompt = catalog.promptWithTriggers(prompt, activeLoras)
     t.messages.push({
       id: uid('m'),
       role: 'user',
@@ -191,7 +193,7 @@ export const useChatStore = defineStore('chat', () => {
     t.composer.text = ''
     t.composer.attachments = []
 
-    const job = await startJob(tab, prompt, snapshot)
+    const job = await startJob(tab, jobPrompt, snapshot)
     t.messages.push({ id: uid('m'), role: 'assistant', jobId: job.id, createdAt: Date.now() })
   }
 

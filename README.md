@@ -39,7 +39,10 @@ running in the background.
   then reports the shared core baseline (GGUF loader required, Manager recommended), what
   each generation module needs, and every model file grouped by what it generates (image /
   video / LoRA / VAE / encoder) - kinds and LoRA triggers are read from file headers only.
-  Read-only today - installers and verified downloads are the next phases
+  Node/package installers for declared requirements are implemented; verified model downloads
+  are the next phase. The editable model/LoRA catalog (`data/model_catalog.json`,
+  *Settings -> Model catalog*) tracks model links, strength ranges and trigger words and feeds
+  the composer - see `docs/MODEL_CATALOG.md`.
   (`docs/COMFYUI_CONTENT.md`).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
   favorites, tags, search. Delete moves files to `data\trash` - **nothing is ever
@@ -102,6 +105,7 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/REQUIREMENTS.md` | the frozen product requirements |
 | `docs/PLAN.md` | architecture + the one-feature-per-step roadmap |
 | `docs/COMFYUI_CONTENT.md` | connect to a user's ComfyUI + manage custom nodes / models (phases A-D) |
+| `docs/MODEL_CATALOG.md` | editable model/LoRA metadata: links, strength ranges, triggers, API |
 | `docs/PACKS.md` | ComfyUI workflow -> pack/recipe guide |
 | `docs/GUI_GUIDELINES.md` | frontend conventions for every new module |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |

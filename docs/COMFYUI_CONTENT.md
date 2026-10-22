@@ -1,9 +1,10 @@
 # ComfyUI content management (custom nodes + models)
 
 Status: **Phase A + A.5 + B implemented** (folder detection, read-only requirements audit,
-core baseline, model inventory with header-derived kinds, pinned node/package installer).
-Phases C–D are planned, not built. This doc is the contract for all of them; the installer
-has its own implementation notes in `docs/COMFYUI_INSTALLER.md`.
+core baseline, model inventory with header-derived kinds, pinned node/package installer, and
+the local editable model/LoRA catalog). Phases C–D are planned, not built. This doc is the
+contract for all of them; implementation notes live in `docs/COMFYUI_INSTALLER.md` and
+`docs/MODEL_CATALOG.md`.
 
 The GUI is a studio on top of ComfyUI - it does **not** bundle it. Users bring their own
 ComfyUI (portable download, ComfyUI Desktop, or a dev git clone); the app learns where it
@@ -115,70 +116,32 @@ Current baseline:
 `optional: true` items never block `ready`; the GUI shows them as "recommended" instead of
 "missing". `why` is an optional human-readable line rendered under the item.
 
-### 2.3 Model catalog & metadata
+### 2.3 Model catalog & metadata (implemented)
 
-Three layers, so metadata never drifts:
+`data/model_catalog.json` is the persistent, editable layer between header inference and
+module recipes. The full schema, merge rules, trigger behavior and API are in
+`docs/MODEL_CATALOG.md`; the short version:
 
-1. **Per-install inference (implemented, read-only).** `inspect()` reads header bytes of
-   `.safetensors` (8-byte length + JSON header) and `.gguf` (scalar metadata keys) to fill
-   `kind`, `arch`, `base` and `triggers`. Unknown files stay `unknown` - nothing is guessed
-   from the extension. `suggestedCategory` flags misfiled files; no file is moved.
-2. **Shipped catalog (Phase C).** Curated, intrinsic facts + download sources. One entry per
-   model or LoRA; entries are global because several modules may use the same file.
-3. **Module recipes (with the packs).** Usage defaults per workflow - steps, cfg, sampler,
-   LoRA stack, resolution. The same model can be used differently by two modules, so these
-   never live in the catalog.
+- **Per-install inference** stays read-only: `inspect()` reads headers for `kind`, `arch`,
+  `base`, `triggers`, sizes and `suggestedCategory`.
+- **Local catalog** (`GET /api/model-catalog`; build/refresh via
+  `POST /api/model-catalog/refresh`) merges that inventory by `target` + file name. Labels,
+  bases, LoRA→model links, triggers, strength/clip ranges, other ranges and notes are editable
+  and survive refreshes. Missing files stay as `present: false`; nothing is deleted.
+- **LoRA links** are explicit `loras[].models` (base model ids) with `modelsAuto` to auto-link
+  by `base`; models expose the inverse list. `strength` is `{default, min, max, step}`
+  (0.8 / 0-1.5 / 0.05 by default); `clipStrength.enabled` covers dual-strength LoRAs;
+  `otherRanges` carries optional partner-knob bounds (`steps`, `cfg`, ...).
+- **Triggers** are appended to the job prompt only while the LoRA is on, in chain order and
+  without duplicates. Typing the trigger yourself does not duplicate it; the textarea is left
+  untouched.
+- **Module recipes** still own workflow-specific defaults (steps/cfg/sampler/stack order).
+  Catalog `otherRanges` are recommendations; the catalog is not a workflow.
 
-Catalog entry (illustrative):
-
-```json
-{
-  "id": "krea2-turbo",
-  "kind": "image",
-  "family": "Krea 2",
-  "architecture": "qwen_image",
-  "files": [
-    {
-      "target": "diffusion_models",
-      "name": "krea2_turbo_q5_k_m.gguf",
-      "url": "https://huggingface.co/<org>/<repo>/resolve/main/krea2_turbo_q5_k_m.gguf",
-      "sha256": "<64 hex chars>",
-      "size": 8870000000
-    }
-  ],
-  "companions": {
-    "vae": ["qwen_image_vae.safetensors"],
-    "text_encoder": ["qwen3vl_4b_fp8_scaled.safetensors"]
-  },
-  "defaults": { "steps": 8, "cfg": 1.0, "sampler": "euler", "scheduler": "simple" },
-  "source": "https://...",
-  "license": "unknown"
-}
-```
-
-LoRA entry - `base` and `triggers` are intrinsic, `defaultWeight` is a suggestion a recipe
-may override:
-
-```json
-{
-  "id": "krea2-g4ngb4ng",
-  "kind": "lora",
-  "base": "krea2",
-  "file": { "target": "loras", "name": "KREA2_G4NGB4NG_V1.safetensors" },
-  "triggers": ["G4NGB4NG"],
-  "defaultWeight": 0.8,
-  "sha256": "<64 hex chars>"
-}
-```
-
-`kind` values are shared with the inspect payload (`image`, `video`, `audio`, `lora`, `vae`,
-`text_encoder`, `clip_vision`, `controlnet`, `upscaler`, `embedding`). Module manifests
-reference catalog `id`s; the audit resolves an id to `target`/`name`/`size` and still matches
-by filename, so a user's existing file is reused without downloading.
-
-Not built yet: the catalog file itself ships with the first real module (it needs verified
-hashes), and user overrides (sidecar JSON next to a file) arrive with an explicit action -
-Phase A writes nothing.
+API: `GET /api/model-catalog`, `POST /api/model-catalog/refresh`,
+`PATCH /api/model-catalog/loras/{id}`, `PATCH /api/model-catalog/models/{id}`. Building reads
+headers only; the only write is the catalog JSON. Phase C will add curated download sources and
+hashes on top of this local layer.
 
 ## 3. Phase A - read-only audit (implemented)
 
@@ -266,8 +229,12 @@ up" experience without shipping gigabytes in the repo.
 | B | `GET /api/comfyui/nodes/tasks` | recent install tasks |
 | B | `GET /api/comfyui/nodes/tasks/{id}` | one task: status, stage, log, error/warning |
 | B | `POST /api/comfyui/restart` | restart ComfyUI (Manager reboot, else instructions) |
+| catalog | `GET /api/model-catalog` | saved model/LoRA metadata; read-only |
+| catalog | `POST /api/model-catalog/refresh` | build/merge from installed file headers |
+| catalog | `PATCH /api/model-catalog/loras/{id}` | edit model links, triggers, strength/clip/other ranges, notes |
+| catalog | `PATCH /api/model-catalog/models/{id}` | edit model label/base/notes |
 | C | `POST /api/comfyui/models/download` | queue a verified model download |
 | C | `GET /api/comfyui/models/downloads` | queue status/progress |
 | D | `POST /api/comfyui/bootstrap` | download + extract official portable |
 
-Phase A/B endpoints are implemented; C–D are placeholders until built.
+Phase A/B and catalog endpoints are implemented; C-D are placeholders until built.

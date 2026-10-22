@@ -14,6 +14,7 @@ import FoldersSection from './sections/FoldersSection.vue'
 import TextPromptsSection from './sections/TextPromptsSection.vue'
 import ResourcesSection from './sections/ResourcesSection.vue'
 import EngineContentSection from './sections/EngineContentSection.vue'
+import ModelCatalogSection from './sections/ModelCatalogSection.vue'
 import AgentSection from './sections/AgentSection.vue'
 
 const route = useRoute()
@@ -28,6 +29,7 @@ const tabs = [
   { id: 'text', label: 'Text & Prompts' },
   { id: 'resources', label: 'Resources' },
   { id: 'content', label: 'Engine content' },
+  { id: 'catalog', label: 'Model catalog' },
   { id: 'agent', label: 'Agent Access' },
 ]
 
@@ -81,6 +83,7 @@ async function doResetAll() {
       <TextPromptsSection v-else-if="tab === 'text'" />
       <ResourcesSection v-else-if="tab === 'resources'" />
       <EngineContentSection v-else-if="tab === 'content'" />
+      <ModelCatalogSection v-else-if="tab === 'catalog'" />
       <AgentSection v-else-if="tab === 'agent'" />
     </div>
 
@@ -91,7 +94,7 @@ async function doResetAll() {
           <p class="text-sm font-semibold">Reset settings</p>
           <p class="mt-0.5 text-xs leading-relaxed text-muted">
             Restores connections and profiles, model and text defaults, folders, prompts and the agent token to
-            the shipped defaults. Files, library assets and jobs are never touched.
+            the shipped defaults. Files, library assets, jobs and the model catalog are never touched.
           </p>
         </div>
         <AppButton variant="danger" @click="confirmReset = true">Reset all to defaults</AppButton>
@@ -114,8 +117,8 @@ async function doResetAll() {
         </ul>
         <p class="flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-warn">
           <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Nothing on disk is deleted - the folders and their files stay exactly as they are. Only
-          settings.json is overwritten with the defaults.
+          Nothing on disk is deleted - the folders and their files stay exactly as they are. The model catalog
+          (model/LoRA links, ranges and triggers) is kept; only settings.json is overwritten with the defaults.
         </p>
       </div>
       <template #footer>

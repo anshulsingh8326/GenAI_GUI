@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ArrowUp, ChevronDown, Images, Plus, SlidersHorizontal, Sparkles, Upload, X } from '@lucide/vue'
-import { imageModels, loras as loraCatalog } from '@/lib/fixtures'
+import { imageModels } from '@/lib/fixtures'
+import { useCatalogStore } from '@/stores/catalog'
 import { useChatStore } from '@/stores/chat'
 import { useLibraryStore } from '@/stores/library'
+import { useSettingsStore } from '@/stores/settings'
 import AppPopover from '@/components/ui/AppPopover.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
+import Badge from '@/components/ui/Badge.vue'
 import AttachmentCard from './AttachmentCard.vue'
 import AttachPickerModal from './AttachPickerModal.vue'
 import AdvancedModal from './AdvancedModal.vue'
@@ -17,10 +20,21 @@ const props = defineProps<{
 
 const chat = useChatStore()
 const library = useLibraryStore()
+const catalog = useCatalogStore()
+const settings = useSettingsStore()
 
 const thread = computed(() => chat.thread(props.tabId))
 const composer = computed(() => thread.value.composer)
 const currentModel = computed(() => imageModels.find((m) => m.id === composer.value.modelId))
+const currentBase = computed(() => currentModel.value?.base ?? null)
+
+watch(
+  () => settings.backendState,
+  (state) => {
+    if (state === 'live') void catalog.ensureLoaded()
+  },
+  { immediate: true },
+)
 
 const ratios = ['1:1', '3:2', '4:3', '16:9', '9:16', '21:9']
 const resolutions = [512, 768, 1024, 1280, 1536, 2048]
@@ -97,11 +111,17 @@ function removeAttachment(id: string) {
   composer.value.attachments = composer.value.attachments.filter((a) => a.id !== id)
 }
 
-const loraName = (id: string) => loraCatalog.find((l) => l.id === id)?.name ?? id
-const availableLoras = computed(() => loraCatalog.filter((l) => !composer.value.loras.some((x) => x.id === l.id)))
+const loraName = (id: string) => catalog.byLora(id)?.label ?? id
+const availableLoras = computed(() => catalog.loras.filter((l) => !composer.value.loras.some((x) => x.id === l.id)))
+const activeTriggers = computed(() => catalog.triggersFor(composer.value.loras.filter((l) => l.on).map((l) => l.id)))
+
+function baseMismatch(id: string): boolean {
+  const base = catalog.byLora(id)?.base
+  return Boolean(base && currentBase.value && base !== currentBase.value)
+}
 
 function addLora(id: string) {
-  composer.value.loras.push({ id, strength: loraCatalog.find((l) => l.id === id)?.defaultStrength ?? 1, on: true })
+  composer.value.loras.push({ id, strength: catalog.defaultStrength(id), on: true })
 }
 
 function removeLora(id: string) {
@@ -272,7 +292,7 @@ function onKeydown(e: KeyboardEvent) {
           </AppPopover>
 
           <!-- lora chain -->
-          <AppPopover v-model="showLoras" up align="right" width="20rem">
+          <AppPopover v-model="showLoras" up align="right" width="22rem">
             <template #trigger>
               <button
                 class="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface-2/70 px-3 text-xs text-text transition-colors hover:border-accent/40"
@@ -288,40 +308,90 @@ function onKeydown(e: KeyboardEvent) {
               <div
                 v-for="l in composer.loras"
                 :key="l.id"
-                class="flex items-center gap-2 rounded-xl border border-border bg-surface-2/40 p-2"
+                class="rounded-xl border border-border bg-surface-2/40 p-2"
               >
-                <AppSwitch v-model="l.on" />
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-[11px]">{{ loraName(l.id) }}</p>
-                  <input
-                    v-model.number="l.strength"
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.05"
-                    class="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-border"
-                    :style="{ accentColor: 'var(--c-accent)' }"
-                  />
+                <div class="flex items-center gap-2">
+                  <AppSwitch v-model="l.on" />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1">
+                      <p class="truncate text-[11px]">{{ loraName(l.id) }}</p>
+                      <Badge v-if="catalog.byLora(l.id)?.base" tone="neutral">{{ catalog.byLora(l.id)?.base }}</Badge>
+                      <Badge v-if="baseMismatch(l.id)" tone="warn">other base</Badge>
+                      <Badge v-if="catalog.byLora(l.id) && !catalog.byLora(l.id)?.present" tone="warn">missing</Badge>
+                    </div>
+                    <p
+                      v-if="catalog.byLora(l.id)?.triggers.length"
+                      class="mt-0.5 truncate text-[9px] text-muted"
+                      :title="catalog.byLora(l.id)?.triggers.join(', ')"
+                    >
+                      trigger: {{ catalog.byLora(l.id)?.triggers.join(', ') }}
+                    </p>
+                    <input
+                      v-model.number="l.strength"
+                      type="range"
+                      :min="catalog.strengthRange(l.id).min"
+                      :max="catalog.strengthRange(l.id).max"
+                      :step="catalog.strengthRange(l.id).step"
+                      class="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-border"
+                      :style="{ accentColor: 'var(--c-accent)' }"
+                    />
+                  </div>
+                  <span class="w-8 shrink-0 text-right text-[10px] tabular-nums text-muted">{{ l.strength.toFixed(2) }}</span>
+                  <button class="shrink-0 cursor-pointer text-muted transition-colors hover:text-danger" @click="removeLora(l.id)">
+                    <X class="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <span class="w-8 shrink-0 text-right text-[10px] tabular-nums text-muted">{{ l.strength.toFixed(2) }}</span>
-                <button class="shrink-0 cursor-pointer text-muted transition-colors hover:text-danger" @click="removeLora(l.id)">
-                  <X class="h-3.5 w-3.5" />
-                </button>
               </div>
               <p v-if="!composer.loras.length" class="px-1 text-[11px] text-muted">No LoRAs in the chain.</p>
             </div>
             <div v-if="availableLoras.length" class="mt-3 border-t border-border pt-2">
               <p class="mb-1 px-1 text-[10px] uppercase tracking-wider text-muted">Add LoRA</p>
-              <button
-                v-for="l in availableLoras"
-                :key="l.id"
-                class="flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-[11px] text-muted transition-colors hover:bg-surface-2 hover:text-text"
-                @click="addLora(l.id)"
-              >
-                <span>{{ l.name }}</span>
-                <Plus class="h-3 w-3" />
-              </button>
+              <div class="max-h-56 overflow-y-auto pr-1">
+                <button
+                  v-for="l in availableLoras"
+                  :key="l.id"
+                  class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+                  :disabled="!l.present"
+                  @click="addLora(l.id)"
+                >
+                  <span class="min-w-0">
+                    <span class="block truncate">{{ l.label }}</span>
+                    <span class="block truncate text-[9px] text-muted">
+                      {{ l.base ? catalog.baseLabel(l.base) : 'unassigned' }}
+                      <template v-if="l.triggers.length"> - {{ l.triggers.join(', ') }}</template>
+                    </span>
+                  </span>
+                  <span class="flex shrink-0 items-center gap-1">
+                    <Badge v-if="!l.present" tone="warn">missing</Badge>
+                    <Badge v-else-if="baseMismatch(l.id)" tone="warn">other base</Badge>
+                    <Plus class="h-3 w-3" />
+                  </span>
+                </button>
+              </div>
             </div>
+            <div v-else-if="catalog.loras.length" class="mt-3 border-t border-border pt-2">
+              <p class="px-1 text-[10px] text-muted">All catalog LoRAs are in the chain.</p>
+            </div>
+            <div v-else class="mt-3 border-t border-border pt-2">
+              <p class="px-1 text-[10px] text-muted">
+                <template v-if="catalog.loading">Loading the LoRA catalog...</template>
+                <template v-else-if="catalog.error">LoRA catalog unavailable (backend offline?).</template>
+                <template v-else>No LoRAs in the catalog yet.</template>
+              </p>
+              <RouterLink
+                to="/settings?tab=catalog"
+                class="mt-1 inline-block px-1 text-[10px] text-accent hover:underline"
+                @click="showLoras = false"
+              >
+                Build it in Settings - Model catalog
+              </RouterLink>
+            </div>
+            <p
+              v-if="activeTriggers.length"
+              class="mt-3 rounded-lg bg-surface-2/60 px-2 py-1.5 text-[10px] leading-relaxed text-muted"
+            >
+              Trigger words added automatically: <span class="text-text">{{ activeTriggers.join(', ') }}</span>
+            </p>
           </AppPopover>
 
           <!-- right group: actions - ml-auto keeps Generate pinned right even when the row wraps -->

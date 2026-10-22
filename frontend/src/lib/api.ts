@@ -7,6 +7,8 @@
 
 import type {
   Asset,
+  CatalogLoraPatch,
+  CatalogModelPatch,
   ComfyInspect,
   ComfyInstallTask,
   ComfyRequirements,
@@ -17,6 +19,7 @@ import type {
   FolderValidation,
   JobRecord,
   MockCompleteResult,
+  ModelCatalog,
   NewJobDraft,
   PathPickResult,
   SettingsEnvelope,
@@ -123,6 +126,20 @@ export const api = {
     request<ComfyInstallTask>(`/api/comfyui/nodes/tasks/${encodeURIComponent(id)}`),
   getComfyInstallTasks: () => request<ComfyInstallTask[]>('/api/comfyui/nodes/tasks'),
   restartComfyui: () => request<ComfyRestartResult>('/api/comfyui/restart', { method: 'POST' }),
+
+  // model + LoRA catalog (explicit build/refresh; entry edits persist)
+  getModelCatalog: () => request<ModelCatalog>('/api/model-catalog'),
+  refreshModelCatalog: () => request<ModelCatalog>('/api/model-catalog/refresh', { method: 'POST' }),
+  updateCatalogLora: (id: string, patch: CatalogLoraPatch) =>
+    request<ModelCatalog>(`/api/model-catalog/loras/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  updateCatalogModel: (id: string, patch: CatalogModelPatch) =>
+    request<ModelCatalog>(`/api/model-catalog/models/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
 
   // library (assets)
   getAssets: (opts: { favorites?: boolean; q?: string; limit?: number } = {}) => {

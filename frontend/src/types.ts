@@ -21,6 +21,8 @@ export interface ModelOption {
   name: string
   family: string
   kind: 'image' | 'upscale' | 'text'
+  /** model family used to match LoRAs from the catalog (krea2, qwen-image, ...) */
+  base?: string
   vram?: string
   installed: boolean
   note?: string
@@ -457,4 +459,107 @@ export interface ComfyRestartResult {
   restarted: boolean
   endpoint: string | null
   message: string
+}
+
+// -- model + LoRA catalog ----------------------------------------------------
+
+/** Stable numeric range: default value plus the slider bounds/step. */
+export interface CatalogRange {
+  default: number
+  min: number
+  max: number
+  step: number
+}
+
+export interface CatalogClipRange extends CatalogRange {
+  /** dual-strength LoRAs only; single-strength LoRAs keep this false */
+  enabled: boolean
+}
+
+export interface CatalogModelEntry {
+  id: string
+  label: string
+  name: string
+  target: string
+  kind: string
+  /** base = can be used to run a workflow; companion = VAE / encoder / upscaler / ... */
+  role: 'base' | 'companion'
+  architecture: string | null
+  base: string | null
+  family: string | null
+  size: number
+  present: boolean
+  suggestedTarget: string | null
+  notes: string
+  /** computed inverse of loras[].models */
+  loras: string[]
+}
+
+export interface CatalogLoraEntry {
+  id: string
+  label: string
+  name: string
+  target: string
+  kind: 'lora'
+  base: string | null
+  family: string | null
+  size: number
+  present: boolean
+  triggers: string[]
+  /** explicit base-model ids this LoRA belongs to */
+  models: string[]
+  /** true = keep models in sync with `base` on refresh */
+  modelsAuto: boolean
+  strength: CatalogRange
+  clipStrength: CatalogClipRange
+  /** additional recommended ranges consumed by module recipes (steps, cfg, ...) */
+  otherRanges: Record<string, CatalogRange>
+  notes: string
+}
+
+export interface CatalogBase {
+  id: string
+  label: string
+  kind: string | null
+  models: number
+  loras: number
+}
+
+export interface ModelCatalog {
+  version: number
+  createdAt: string | null
+  updatedAt: string | null
+  source: {
+    comfyuiFolder?: string
+    flavor?: string | null
+    version?: string | null
+  }
+  bases: CatalogBase[]
+  models: CatalogModelEntry[]
+  loras: CatalogLoraEntry[]
+  stats: {
+    models: number
+    baseModels: number
+    loras: number
+    missing: number
+    withTriggers: number
+  }
+}
+
+export interface CatalogLoraPatch {
+  label?: string
+  base?: string | null
+  models?: string[]
+  modelsAuto?: boolean
+  triggers?: string[]
+  strength?: CatalogRange
+  clipStrength?: CatalogClipRange
+  otherRanges?: Record<string, CatalogRange>
+  notes?: string
+}
+
+export interface CatalogModelPatch {
+  label?: string
+  base?: string | null
+  notes?: string
 }
