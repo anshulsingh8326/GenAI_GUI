@@ -8,7 +8,9 @@
 import type {
   Asset,
   ComfyInspect,
+  ComfyInstallTask,
   ComfyRequirements,
+  ComfyRestartResult,
   ConnTestResult,
   EngineActionResult,
   EngineLaunchResult,
@@ -108,10 +110,19 @@ export const api = {
       body: JSON.stringify({ model: model ?? null }),
     }),
 
-  // comfyui content (read-only in Phase A - see docs/COMFYUI_CONTENT.md)
+  // comfyui content (read-only inspection; installs are explicit clicks)
   inspectComfy: (path?: string) =>
     request<ComfyInspect>(`/api/comfyui/inspect${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   getComfyRequirements: () => request<ComfyRequirements>('/api/comfyui/requirements'),
+  installComfyNode: (moduleId: string, nodeName: string) =>
+    request<ComfyInstallTask>('/api/comfyui/nodes/install', {
+      method: 'POST',
+      body: JSON.stringify({ moduleId, nodeName }),
+    }),
+  getComfyInstallTask: (id: string) =>
+    request<ComfyInstallTask>(`/api/comfyui/nodes/tasks/${encodeURIComponent(id)}`),
+  getComfyInstallTasks: () => request<ComfyInstallTask[]>('/api/comfyui/nodes/tasks'),
+  restartComfyui: () => request<ComfyRestartResult>('/api/comfyui/restart', { method: 'POST' }),
 
   // library (assets)
   getAssets: (opts: { favorites?: boolean; q?: string; limit?: number } = {}) => {

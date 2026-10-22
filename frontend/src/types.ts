@@ -385,6 +385,8 @@ export interface ComfyRequirementNode {
   why: string
   /** Python module for package-style installs (ComfyUI 0.30+ Manager), else "" */
   package: string
+  /** pip spec for package-style installs, else "" */
+  pip: string
   /** true/false = checked; null = no ComfyUI folder configured yet. */
   installed: boolean | null
   installedPath: string | null
@@ -430,4 +432,29 @@ export interface ComfyRequirements {
   /** shared baseline every module relies on (GGUF loader, recommended Manager, ...) */
   core: ComfyCoreRequirements
   modules: ComfyModuleRequirements[]
+}
+
+export interface ComfyInstallTask {
+  id: string
+  moduleId: string
+  moduleName: string
+  nodeName: string
+  action: 'pip' | 'clone' | 'update'
+  target: string
+  repo: string
+  commit: string
+  status: 'running' | 'succeeded' | 'failed'
+  stage: string
+  log: string[]
+  error: string | null
+  warning: string | null
+  restartRequired: boolean
+  startedAt: string
+  finishedAt: string | null
+}
+
+export interface ComfyRestartResult {
+  restarted: boolean
+  endpoint: string | null
+  message: string
 }

@@ -616,6 +616,32 @@ def _load_core() -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+def load_requirements(module_id: str) -> tuple[str, dict]:
+    """Requirement block for `core` or an installed GenModule, by id.
+
+    Used by the installer: the server only installs entries that a shipped
+    requirements.json declares - the GUI can never ask for an arbitrary repo.
+    """
+    if module_id == "core":
+        return "Core requirements", _load_core()
+
+    base = capabilities.GENMODULES_DIR
+    if not base.is_dir() or not module_id or module_id.startswith("."):
+        raise ValueError("Unknown module id")
+    try:
+        folder = (base / module_id).resolve()
+        root = base.resolve()
+    except OSError as exc:
+        raise ValueError("Unknown module id") from exc
+    if folder.parent != root or not folder.is_dir() or not (folder / "manifest.json").is_file():
+        raise LookupError(f"Unknown module: {module_id}")
+    try:
+        raw = json.loads((folder / "requirements.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Module {module_id} has no valid requirements.json") from exc
+    return _module_name(folder), raw if isinstance(raw, dict) else {}
+
+
 def _audit_block(
     raw: object,
     valid: bool,
@@ -713,6 +739,7 @@ def _check_node(raw: object) -> dict:
         "optional": bool(item.get("optional")),
         "why": str(item.get("why") or ""),
         "package": str(item.get("package") or ""),
+        "pip": str(item.get("pip") or ""),
         "installed": None,
         "installedPath": None,
         "installedCommit": None,

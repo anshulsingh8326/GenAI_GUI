@@ -10,6 +10,7 @@ import AppInput from '@/components/ui/AppInput.vue'
 import Badge from '@/components/ui/Badge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
+import NodeInstallButton from '@/components/content/NodeInstallButton.vue'
 
 const settings = useSettingsStore()
 const content = useContentStore()
@@ -158,7 +159,7 @@ onMounted(() => void content.refresh())
 <template>
   <Section
     title="Engine content"
-    desc="What the installed generation modules need from ComfyUI - custom nodes and model files - and what is already there. Read-only: this page only reports, nothing is installed or downloaded."
+    desc="What the installed generation modules need from ComfyUI - custom nodes and model files - and what is already there. Inspection is read-only; installs and updates only happen from the buttons below."
   >
     <!-- folder status -->
     <div class="rounded-xl border border-dashed border-border p-3">
@@ -238,6 +239,7 @@ onMounted(() => void content.refresh())
             >
               installed {{ node.installedCommit }} &middot; wants {{ node.commit.slice(0, 7) }}
             </span>
+            <NodeInstallButton module-id="core" module-name="Core requirements" :node="node" />
           </div>
           <p v-if="node.why" class="mt-0.5 text-[10px] leading-relaxed text-muted">{{ node.why }}</p>
         </div>
@@ -299,6 +301,7 @@ onMounted(() => void content.refresh())
               >
                 installed {{ node.installedCommit }} &middot; wants {{ node.commit.slice(0, 7) }}
               </span>
+              <NodeInstallButton :module-id="mod.id" :module-name="mod.name" :node="node" />
             </div>
           </div>
 
@@ -378,8 +381,9 @@ onMounted(() => void content.refresh())
 
     <p class="mt-4 text-[11px] leading-relaxed text-muted">
       Matching is by custom-node folder / git origin and by model filename under the target folder (plus size when the
-      manifest has one). Model kinds, LoRA bases and trigger words come from safetensors / GGUF headers only - no model
-      is loaded. Hashes are verified at download time in a later phase. Plan:
+      manifest has one). Install/Update clones a pinned commit, installs the node's Python requirements, and asks
+      ComfyUI-Manager to restart. Model kinds, LoRA bases and trigger words come from safetensors / GGUF headers only -
+      no model is loaded. Hashes are verified at download time in a later phase. Plan:
       <code class="rounded bg-surface-2 px-1 py-0.5">docs/COMFYUI_CONTENT.md</code>.
     </p>
   </Section>

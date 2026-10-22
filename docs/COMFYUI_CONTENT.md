@@ -1,8 +1,9 @@
 # ComfyUI content management (custom nodes + models)
 
-Status: **Phase A + A.5 implemented** (folder detection, read-only requirements audit, core
-baseline, model inventory with header-derived kinds). Phases B–D are planned, not built.
-This doc is the contract for all of them.
+Status: **Phase A + A.5 + B implemented** (folder detection, read-only requirements audit,
+core baseline, model inventory with header-derived kinds, pinned node/package installer).
+Phases C–D are planned, not built. This doc is the contract for all of them; the installer
+has its own implementation notes in `docs/COMFYUI_INSTALLER.md`.
 
 The GUI is a studio on top of ComfyUI - it does **not** bundle it. Users bring their own
 ComfyUI (portable download, ComfyUI Desktop, or a dev git clone); the app learns where it
@@ -89,6 +90,9 @@ Field rules:
   `<module>-*.dist-info` in the detected site-packages (portable + venv layouts). ComfyUI
   0.30+ Manager is installed this way; legacy `custom_nodes/ComfyUI-Manager` still matches
   by name.
+- `nodes[].pip` - the pip requirement used when installing that package (for example
+  `comfyui-manager>=4.2,<5`). Required for package entries that have no custom_nodes folder
+  to clone; the installer uses the detected ComfyUI Python.
 - `models[].target` - the ComfyUI models category folder (`checkpoints`, `loras`, `vae`,
   `text_encoders`, ...). `url`/`sha256`/`size` are required for Phase C downloads; Phase A
   only needs `name` + `target` (+ `size` when known for the match check).
@@ -196,23 +200,33 @@ Phase A writes nothing.
   cached per process keyed by path + mtime + size (a full scan of a ~40-file library is
   ~0.3 s cold, ~0 ms warm).
 
-## 4. Phase B - node installer (planned)
+## 4. Phase B - node installer (implemented)
 
-- Trigger: per-node "Install" button in the Engine content tab (and a "Install all missing"
-  per module), after a confirm dialog that lists exactly what will run.
+See `docs/COMFYUI_INSTALLER.md` for the full API, task shape, command limits and test matrix.
+
+- Trigger: per-node **Install** / **Update** / **Retry** buttons in the Engine content tab,
+  after a confirm dialog that lists the repository, pinned commit and what will run.
 - Mechanic (mirrors what ComfyUI-Manager / `comfy-cli` do):
-  1. `git clone <repo> <custom_nodes>/<name>` (or `git fetch` + `checkout <commit>` when the
-     folder already exists) - **falls back to a zip download** (`codeload.github.com/<repo>/zip/<sha>`)
-     when git is not on the machine.
+  1. `git clone <repo>` into staging, `checkout <commit>`, then move it to
+     `custom_nodes/<name>` (or `git fetch` + `checkout <commit>` for an existing git
+     checkout) - **falls back to a zip download**
+     (`codeload.github.com/<repo>/zip/<sha>`) when git is not on the machine. The zip fallback
+     requires a GitHub repo and a pinned commit.
   2. If `requirements.txt` exists: `<python> -m pip install -r requirements.txt`.
      Else if `install.py` exists: `<python> install.py`.
-  3. Log every line to the GUI (streaming); failures leave the clone in place for retry.
+  3. Every command streams into a task log (last 500 lines, 15-minute timeout); failures
+     leave the node in place for retry.
+- Package-style entries (`package` + `pip`, e.g. ComfyUI-Manager) install with the detected
+  ComfyUI Python instead of cloning. An official `comfy/manager_requirements.txt` takes
+  precedence over the manifest's pip spec.
+- Existing non-git folders are never overwritten; updates refuse a dirty checkout. One install
+  runs at a time (HTTP 409 for a second). No automatic updates.
 - Node changes need a **ComfyUI restart**: the GUI offers "Restart ComfyUI" - uses the
   Manager reboot endpoint (`POST /api/v2/manager/reboot` on Manager 4.x, legacy
   `/api/manager/reboot` otherwise) when Manager is installed, else tells the user to close +
   relaunch (the launcher button is right there).
 - Pinned commits only; version skew is reported ("installed: abc1234, wanted: def5678") and
-  never auto-updated.
+  never auto-updated. After each task the GUI re-runs the audit.
 
 ## 5. Phase C - model downloads (planned)
 
@@ -248,10 +262,12 @@ up" experience without shipping gigabytes in the repo.
 | --- | --- | --- |
 | A | `GET /api/comfyui/inspect?path=` | validate folder, flavor, python, nodes, model inventory (kind/arch/base/triggers), suggestions |
 | A | `GET /api/comfyui/requirements` | core baseline + per-module node/model audit |
-| B | `POST /api/comfyui/nodes/install` | install/repair one required node (pinned) |
+| B | `POST /api/comfyui/nodes/install` | install/update/repair one declared node or package (pinned, 202 + task) |
+| B | `GET /api/comfyui/nodes/tasks` | recent install tasks |
+| B | `GET /api/comfyui/nodes/tasks/{id}` | one task: status, stage, log, error/warning |
 | B | `POST /api/comfyui/restart` | restart ComfyUI (Manager reboot, else instructions) |
 | C | `POST /api/comfyui/models/download` | queue a verified model download |
 | C | `GET /api/comfyui/models/downloads` | queue status/progress |
 | D | `POST /api/comfyui/bootstrap` | download + extract official portable |
 
-Phase A endpoints are implemented; B–D are placeholders until built.
+Phase A/B endpoints are implemented; C–D are placeholders until built.
