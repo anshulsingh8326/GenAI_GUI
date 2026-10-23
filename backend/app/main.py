@@ -18,6 +18,7 @@ from . import APP_NAME, __version__
 from .api import api
 from .common import db, paths
 from .connectors.service import maybe_autostart_comfyui
+from .GenModules.T2I_main.backend import service as t2i_service
 
 SPA_DIST = paths._REPO_ROOT / "frontend" / "dist"
 
@@ -70,7 +71,17 @@ def _autostart_comfyui() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _autostart_comfyui()
-    yield
+    # Reattach to T2I prompts that were already submitted before a restart.
+    # This only creates background tasks; a missing ComfyUI is retried by the
+    # runner and never blocks app boot.
+    try:
+        await t2i_service.resume_pending_jobs()
+    except Exception as err:  # noqa: BLE001 - boot continues no matter what
+        logger.warning("[t2i] resume on boot failed: %s", err)
+    try:
+        yield
+    finally:
+        t2i_service.shutdown()
 
 
 def create_app() -> FastAPI:

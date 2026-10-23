@@ -16,7 +16,7 @@ backend/app/
   library/           asset store: files in data/library + rows, scans, thumbnails, placeholders
   jobs/              persistent job records (ids, stages, progress, results)
   mcp/               MCP server (stdio v0): thin tools over the same services
-  GenModules/        one folder per generation module - arrives with the first real pipeline step (see its README)
+  GenModules/        installed generation modules (T2I_main is the reference; see its README)
 ```
 
 ## Run (dev)
@@ -110,17 +110,38 @@ category, 500 custom nodes).
 | GET | `/api/jobs` | job history, newest first (`?limit=`) |
 | POST | `/api/jobs` | create a job record - the backend owns ids (`#142`, `#143`, ...) |
 | GET | `/api/jobs/{id}` | one job |
-| PATCH | `/api/jobs/{id}` | persist `status` / `progress` / `stages` / `enhancedPrompt` / `resultIds` / `error` |
-| POST | `/api/jobs/{id}/mock-complete` | **mock phase** (see below) |
+| PATCH | `/api/jobs/{id}` | persist `status` / `progress` / `params` / `stages` / `enhancedPrompt` / `resultIds` / `error` |
+| POST | `/api/jobs/{id}/mock-complete` | **mock/legacy** endpoint for the old mock runner (see below) |
 
 ### Mock phase: `POST /api/jobs/{id}/mock-complete`
 
-Execution is still simulated in the GUI until the ComfyUI pipeline lands, so
-this endpoint stands in for "the engine wrote outputs into the library": it
-generates deterministic placeholder PNGs (`library/placeholders.py`, Pillow),
-registers them as assets of that job, and marks the job done. Deleting this
-endpoint (and its frontend caller) is all that changes when real execution
-arrives - the response shape `{ job, assets }` stays the same.
+The T2I_main module now runs real ComfyUI jobs and does not use this endpoint.
+It remains for the other mock-driven tabs while they are migrated: it generates
+deterministic placeholder PNGs (`library/placeholders.py`, Pillow), registers
+them as assets of that job, and marks the job done. The generic job store is
+shared by both paths; the module-specific runner persists the same job record
+shape.
+
+## T2I_main endpoints (real Text -> Image pipeline)
+
+Mounted by `app/api/__init__.py`; implementation in
+`app/GenModules/T2I_main/backend/`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/t2i/catalog` | models, LoRAs, upscalers, text models, ranges, defaults, presets, engine status, warnings |
+| GET | `/api/t2i/pack` | tracked pack summary (recipe, workflow, ids, node count) |
+| POST | `/api/t2i/validate` | validate + normalize without creating a job |
+| POST | `/api/t2i/enhance` | Ollama/ComfyUI prompt enhancement preview (no job) |
+| POST | `/api/t2i/jobs` | validate, persist and start a real generation job |
+| GET | `/api/t2i/jobs` | recent T2I jobs (`?limit=`) |
+| GET | `/api/t2i/jobs/{job_id}` | one job with stages, params, result ids |
+| POST | `/api/t2i/jobs/{job_id}/cancel` | best-effort cancel; finished jobs are a no-op |
+
+Job ids contain `#`, so REST clients must URL-encode them (`%23`). The module
+reuses the shared job records and the shared asset library; it never bypasses
+the range checks in `service.py`. The full GUI behaviour contract is in
+`app/GenModules/T2I_main/frontend/README.md`.
 
 ## MCP server (agent access)
 

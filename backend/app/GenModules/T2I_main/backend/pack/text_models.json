@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Prompt-enhancement models for T2I_main. Ollama models are discovered live; ComfyUI text-generation models are declared here because they need an explicit CLIPLoader type.",
+  "comfyui": [
+    {
+      "id": "qwen3vl-4b-comfy",
+      "label": "Qwen3-VL 4B (ComfyUI)",
+      "provider": "comfyui",
+      "file": "qwen3vl_4b_fp8_scaled.safetensors",
+      "target": "text_encoders",
+      "clipType": "krea2",
+      "node": "TextGenerate",
+      "maxLength": 512,
+      "verified": true,
+      "tested": true,
+      "vram": "~5 GB",
+      "notes": "Confirmed by Krea2_SNOFS_Freeze_v8: CLIPLoader (qwen3vl_4b_fp8_scaled, type krea2) -> TextGenerate. RgthreeDisplayAny is used to return the generated text through /history."
+    }
+  ],
+  "ollama": {
+    "autoDiscover": true,
+    "preferred": [
+      "qwen3-abliterated:8b",
+      "qwen3:8b",
+      "qwen2.5:7b",
+      "llama3.1:8b"
+    ],
+    "notes": "Ollama is preferred on 12 GB because it unloads independently from ComfyUI. The GUI lists installed models from GET /api/t2i/catalog; the backend re-checks installation before running."
+  }
+}

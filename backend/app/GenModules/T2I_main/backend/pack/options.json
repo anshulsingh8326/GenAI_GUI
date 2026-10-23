@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "recipe": {
+    "id": "krea2-t2i-v1",
+    "label": "Krea 2 T2I (Freeze v8)",
+    "workflow": "workflows/krea2_t2i.api.json",
+    "engine": "comfyui",
+    "description": "Strict Text -> Image: Krea 2 Turbo, Qwen3-VL text encoder, qwen_image VAE, optional LoRA chain, optional latent refine and optional 4x-UltraSharp."
+  },
+  "defaults": {
+    "recipeId": "krea2-t2i-v1",
+    "modelId": "krea2-turbo-int8",
+    "ratio": "1:1",
+    "size": 1024,
+    "batch": 1,
+    "lockSeed": false,
+    "negativePrompt": "",
+    "autoTriggers": true,
+    "enhanceEnabled": false,
+    "upscaler": {
+      "id": "latent-refine",
+      "enabled": true,
+      "value": 1536
+    },
+    "loraChain": [
+      {
+        "id": "lora-xcreampiex-krea2-v1-1-000002500",
+        "strength": 1.0,
+        "on": true
+      },
+      {
+        "id": "lora-krea2-g4ngb4ng-v1",
+        "strength": 2.0,
+        "on": true
+      },
+      {
+        "id": "lora-mysticxxx-krea2-v3",
+        "strength": 0.7,
+        "on": true
+      },
+      {
+        "id": "lora-krea-2-mombod-epoch-7",
+        "strength": 0.6,
+        "on": true
+      },
+      {
+        "id": "lora-realism-engine-krea2-v3-1",
+        "strength": 0.6,
+        "on": true
+      }
+    ]
+  },
+  "ratios": [
+    { "id": "1:1", "label": "1:1", "w": 1, "h": 1 },
+    { "id": "4:5", "label": "4:5", "w": 4, "h": 5 },
+    { "id": "3:4", "label": "3:4", "w": 3, "h": 4 },
+    { "id": "2:3", "label": "2:3", "w": 2, "h": 3 },
+    { "id": "9:16", "label": "9:16", "w": 9, "h": 16 },
+    { "id": "5:4", "label": "5:4", "w": 5, "h": 4 },
+    { "id": "4:3", "label": "4:3", "w": 4, "h": 3 },
+    { "id": "3:2", "label": "3:2", "w": 3, "h": 2 },
+    { "id": "16:9", "label": "16:9", "w": 16, "h": 9 }
+  ],
+  "size": {
+    "label": "Size",
+    "longSideDefault": 1024,
+    "step": 64,
+    "values": [512, 640, 768, 896, 1024, 1152, 1280, 1536],
+    "description": "Size is the long side in pixels. Width and height are derived from the selected ratio and rounded to the 64 px step; the API also accepts explicit width/height."
+  },
+  "samplers": [
+    { "id": "euler", "label": "Euler", "default": true },
+    { "id": "euler_ancestral", "label": "Euler ancestral" },
+    { "id": "dpmpp_2m", "label": "DPM++ 2M" },
+    { "id": "dpmpp_2m_sde", "label": "DPM++ 2M SDE" },
+    { "id": "dpmpp_3m_sde", "label": "DPM++ 3M SDE" },
+    { "id": "dpm_2", "label": "DPM 2" },
+    { "id": "dpm_2_ancestral", "label": "DPM 2 ancestral" },
+    { "id": "ddim", "label": "DDIM" },
+    { "id": "uni_pc", "label": "UniPC" },
+    { "id": "lms", "label": "LMS" },
+    { "id": "heun", "label": "Heun" },
+    { "id": "deis", "label": "DEIS" }
+  ],
+  "schedulers": [
+    { "id": "simple", "label": "Simple", "default": true },
+    { "id": "normal", "label": "Normal" },
+    { "id": "karras", "label": "Karras" },
+    { "id": "exponential", "label": "Exponential" },
+    { "id": "sgm_uniform", "label": "SGM uniform" },
+    { "id": "beta", "label": "Beta" },
+    { "id": "linear_quadratic", "label": "Linear quadratic" },
+    { "id": "kl_optimal", "label": "KL optimal" }
+  ],
+  "limits": {
+    "promptMaxChars": 8000,
+    "negativePromptMaxChars": 4000,
+    "maxLoras": 8,
+    "jobTimeoutSeconds": 1800,
+    "pollIntervalSeconds": 1.0,
+    "historyTimeoutSeconds": 15,
+    "enhanceTimeoutSeconds": 240,
+    "downloadTimeoutSeconds": 120,
+    "downloadRetries": 3
+  },
+  "enhance": {
+    "systemPromptKey": "enhance",
+    "defaultProvider": "ollama",
+    "ollama": {
+      "temperature": 0.7,
+      "numPredict": 512,
+      "timeoutSeconds": 240
+    },
+    "comfyui": {
+      "maxLength": 512,
+      "temperature": 0.7,
+      "topK": 64,
+      "topP": 0.95,
+      "minP": 0.05,
+      "repetitionPenalty": 1.05,
+      "presencePenalty": 0.0,
+      "timeoutSeconds": 240
+    }
+  }
+}

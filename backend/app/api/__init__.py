@@ -6,6 +6,8 @@ in the service folders (common, settings, connectors, ... GenModules).
 
 from fastapi import APIRouter
 
+from app.GenModules.T2I_main.backend import api as t2i_api
+
 from . import assets, connectors, engine_content, folders, jobs, model_catalog, settings, status, system
 
 api = APIRouter(prefix="/api")
@@ -18,3 +20,4 @@ api.include_router(engine_content.router)
 api.include_router(model_catalog.router)
 api.include_router(assets.router)
 api.include_router(jobs.router)
+api.include_router(t2i_api.router)

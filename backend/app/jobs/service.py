@@ -1,10 +1,10 @@
 """Jobs service - persistent job records.
 
 The GUI creates a job when a generation starts, streams stage/progress patches
-into it, and marks it done/failed. Execution itself is still simulated in the
-GUI (mock runner) until the ComfyUI pipeline lands - `complete_mock()` is the
-mock-phase stand-in for "the engine wrote outputs into the library" and is
-deleted when the real runner arrives.
+into it, and marks it done/failed. Generation modules persist their own module
+metadata in `params` and write results into the shared library. T2I_main uses a
+real ComfyUI runner; `complete_mock()` remains the placeholder stand-in for
+tabs that have not migrated yet and is not used by the module runner.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ _UPDATABLE = {
     "status": "status",
     "progress": "progress",
     "enhancedPrompt": "enhanced_prompt",
+    "params": "params_json",
     "stages": "stages_json",
     "resultIds": "result_ids_json",
     "error": "error",
@@ -40,6 +41,7 @@ def _row_to_job(row) -> dict:
         "status": row["status"],
         "progress": row["progress"] or 0,
         "tab": row["tab"] or "",
+        "module": row["module"] or "",
         "modelId": row["model_id"] or "",
         "modelName": row["model_name"] or "",
         "recipe": row["recipe"] or "",
@@ -63,7 +65,9 @@ def _load(raw: str | None, fallback):
 
 
 def _dump(value) -> str:
-    return json.dumps(value or [])
+    # params_json is an object while stages/resultIds are arrays. Preserve an
+    # explicitly empty object instead of turning it into [].
+    return json.dumps(value if value is not None else [])
 
 
 def _next_id(conn) -> str:
@@ -85,13 +89,14 @@ def create_job(payload: dict) -> dict:
             INSERT INTO jobs (id, created_at, updated_at, status, tab, module, model_id,
                               model_name, recipe, prompt, seed, params_json, stages_json,
                               result_ids_json)
-            VALUES (:id, :now, :now, 'running', :tab, 'text-to-image', :model_id,
+            VALUES (:id, :now, :now, 'running', :tab, :module, :model_id,
                     :model_name, :recipe, :prompt, :seed, :params, :stages, '[]')
             """,
             {
                 "id": job_id,
                 "now": now_ms(),
                 "tab": payload.get("tab") or "",
+                "module": payload.get("module") or "text-to-image",
                 "model_id": payload.get("modelId") or "",
                 "model_name": payload.get("modelName") or "",
                 "recipe": payload.get("recipe") or "",
@@ -112,11 +117,17 @@ def get_job(job_id: str) -> dict | None:
     return _row_to_job(row) if row else None
 
 
-def list_jobs(limit: int = 80) -> list[dict]:
+def list_jobs(limit: int = 80, module: str | None = None) -> list[dict]:
     with db.connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
+        if module:
+            rows = conn.execute(
+                "SELECT * FROM jobs WHERE module = ? ORDER BY created_at DESC LIMIT ?",
+                (module, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
     return [_row_to_job(r) for r in rows]
 
 

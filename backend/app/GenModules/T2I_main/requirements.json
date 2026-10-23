@@ -1,0 +1,90 @@
+{
+  "nodes": [
+    {
+      "name": "ComfyUI-GGUF",
+      "repo": "https://github.com/city96/ComfyUI-GGUF",
+      "optional": true,
+      "why": "Required only for the Krea 2 Turbo Q5_K_M GGUF model (UnetLoaderGGUF). The int8 path uses the built-in UNETLoader."
+    },
+    {
+      "name": "rgthree-comfy",
+      "repo": "https://github.com/rgthree/rgthree-comfy",
+      "optional": true,
+      "why": "Provides RgthreeDisplayAny, used by the optional ComfyUI prompt-enhancement workflow to return generated text through /history."
+    }
+  ],
+  "models": [
+    {
+      "name": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
+      "target": "unet",
+      "size": 12829186855,
+      "optional": false
+    },
+    {
+      "name": "krea2_turbo-Q5_K_M.gguf",
+      "target": "unet",
+      "size": 8871195936,
+      "optional": true
+    },
+    {
+      "name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "target": "text_encoders",
+      "size": 5242467968,
+      "optional": false
+    },
+    {
+      "name": "qwen_image_vae.safetensors",
+      "target": "vae",
+      "size": 253806246,
+      "optional": false
+    },
+    {
+      "name": "4x-UltraSharp.pth",
+      "target": "upscale_models",
+      "size": 66961958,
+      "optional": true
+    },
+    {
+      "name": "xCreampiex_krea2_v1.1_000002500.safetensors",
+      "target": "loras",
+      "size": 228587792,
+      "optional": true
+    },
+    {
+      "name": "KREA2_G4NGB4NG_V1.safetensors",
+      "target": "loras",
+      "size": 228587768,
+      "optional": true
+    },
+    {
+      "name": "MysticXXX_KREA2_v3.safetensors",
+      "target": "loras",
+      "size": 228587304,
+      "optional": true
+    },
+    {
+      "name": "Krea_2_Mombod_epoch_7.safetensors",
+      "target": "loras",
+      "size": 228588912,
+      "optional": true
+    },
+    {
+      "name": "realism_engine_krea2_v3.1.safetensors",
+      "target": "loras",
+      "size": 1562410296,
+      "optional": true
+    },
+    {
+      "name": "labia_minora_krea2_loraholic.safetensors",
+      "target": "loras",
+      "size": 7203152,
+      "optional": true
+    },
+    {
+      "name": "Krea2_NSFW_Aesthetics_V1.safetensors",
+      "target": "loras",
+      "size": 457111976,
+      "optional": true
+    }
+  ]
+}

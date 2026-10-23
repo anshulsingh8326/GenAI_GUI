@@ -1,0 +1,740 @@
+"""T2I_main pack loader + catalog merge.
+
+The tracked pack under ``backend/pack`` is authoritative for this module:
+
+- per-model bindings and ranges (models.json)
+- per-LoRA ranges / triggers / exclusions (loras.json)
+- upscale paths (upscalers.json)
+- prompt-enhancement models (text_models.json)
+- recipe defaults, ratios, sizes, sampler lists (options.json)
+- the ComfyUI API workflow (workflows/krea2_t2i.api.json)
+
+The user-owned ``data/model_catalog.json`` (app.engine_content.catalog) is used
+only for installed-file presence and user-edited trigger words. It never
+overrides the module's T2I ranges: a pro user edits the tracked pack to widen
+ranges (up to the hard limits declared next to each range).
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+from typing import Any
+
+from app.engine_content import catalog as user_catalog
+
+PACK_DIR = Path(__file__).resolve().parent / "pack"
+
+MODEL_RANGE_KEYS = ("steps", "cfg", "denoise", "width", "height", "batch", "seed")
+REFINE_RANGE_KEYS = ("steps", "cfg", "denoise", "scale")
+
+
+class PackError(Exception):
+    """The tracked T2I pack is missing or invalid."""
+
+
+def _read_json(name: str) -> dict:
+    path = PACK_DIR / name
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise PackError(f"Missing T2I pack file: {path}") from exc
+    except ValueError as exc:
+        raise PackError(f"T2I pack file is not valid JSON: {name}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise PackError(f"T2I pack file must contain a JSON object: {name}")
+    return raw
+
+
+def _text(value: Any, field: str, *, required: bool = True, default: str = "") -> str:
+    text = str(value or "").strip()
+    if required and not text:
+        raise PackError(f"T2I pack: `{field}` is required.")
+    return text or default
+
+
+def _bool(value: Any, default: bool = False) -> bool:
+    return bool(default if value is None else value)
+
+
+def _number(value: Any, field: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise PackError(f"T2I pack: `{field}` must be a number.") from exc
+    if not math.isfinite(number):
+        raise PackError(f"T2I pack: `{field}` must be finite.")
+    return number
+
+
+def _precision(step: float) -> int:
+    if step >= 1:
+        return 0
+    if step >= 0.1:
+        return 1
+    if step >= 0.01:
+        return 2
+    return 3
+
+
+def clean_range(raw: Any, field: str) -> dict:
+    """Validate one range and return the complete GUI/backend contract."""
+    if not isinstance(raw, dict):
+        raise PackError(f"T2I pack: `{field}` must be an object.")
+    minimum = _number(raw.get("min"), f"{field}.min")
+    maximum = _number(raw.get("max"), f"{field}.max")
+    default = _number(raw.get("default"), f"{field}.default")
+    step = _number(raw.get("step"), f"{field}.step")
+    hard_min = _number(raw.get("hardMin", minimum), f"{field}.hardMin")
+    hard_max = _number(raw.get("hardMax", maximum), f"{field}.hardMax")
+    recommended_min = _number(raw.get("recommendedMin", minimum), f"{field}.recommendedMin")
+    recommended_max = _number(raw.get("recommendedMax", maximum), f"{field}.recommendedMax")
+
+    if step <= 0:
+        raise PackError(f"T2I pack: `{field}.step` must be greater than zero.")
+    if not (hard_min <= minimum <= maximum <= hard_max):
+        raise PackError(
+            f"T2I pack: `{field}` must satisfy hardMin <= min <= max <= hardMax "
+            f"({hard_min} <= {minimum} <= {maximum} <= {hard_max})."
+        )
+    if not (minimum <= default <= maximum):
+        raise PackError(f"T2I pack: `{field}.default` must be inside min..max.")
+    if not (minimum <= recommended_min <= recommended_max <= maximum):
+        raise PackError(f"T2I pack: `{field}` recommended range must be inside min..max.")
+
+    return {
+        "label": str(raw.get("label") or field),
+        "min": minimum,
+        "max": maximum,
+        "default": default,
+        "step": step,
+        "recommendedMin": recommended_min,
+        "recommendedMax": recommended_max,
+        "hardMin": hard_min,
+        "hardMax": hard_max,
+        "unit": str(raw.get("unit") or ""),
+        "description": str(raw.get("description") or ""),
+        "precision": _precision(step),
+    }
+
+
+def _clean_model(raw: Any, options: dict) -> dict:
+    if not isinstance(raw, dict):
+        raise PackError("T2I pack: every models[] item must be an object.")
+    model_id = _text(raw.get("id"), "models[].id")
+    loader = _text(raw.get("loader"), f"models.{model_id}.loader")
+    if loader not in {"UNETLoader", "UnetLoaderGGUF"}:
+        raise PackError(f"T2I pack: unsupported model loader `{loader}` for {model_id}.")
+    ranges_raw = raw.get("ranges")
+    if not isinstance(ranges_raw, dict):
+        raise PackError(f"T2I pack: `models.{model_id}.ranges` is required.")
+    ranges = {key: clean_range(ranges_raw.get(key), f"models.{model_id}.ranges.{key}") for key in MODEL_RANGE_KEYS}
+    refine_raw = ranges_raw.get("refine")
+    if not isinstance(refine_raw, dict):
+        raise PackError(f"T2I pack: `models.{model_id}.ranges.refine` is required.")
+    ranges["refine"] = {
+        key: clean_range(refine_raw.get(key), f"models.{model_id}.ranges.refine.{key}")
+        for key in REFINE_RANGE_KEYS
+    }
+
+    defaults_raw = raw.get("defaults") or {}
+    if not isinstance(defaults_raw, dict):
+        raise PackError(f"T2I pack: `models.{model_id}.defaults` must be an object.")
+    defaults = {
+        "steps": int(defaults_raw.get("steps", ranges["steps"]["default"])),
+        "cfg": float(defaults_raw.get("cfg", ranges["cfg"]["default"])),
+        "sampler": str(defaults_raw.get("sampler") or "euler"),
+        "scheduler": str(defaults_raw.get("scheduler") or "simple"),
+        "denoise": float(defaults_raw.get("denoise", ranges["denoise"]["default"])),
+    }
+    sampler_ids = {item["id"] for item in options["samplers"]}
+    scheduler_ids = {item["id"] for item in options["schedulers"]}
+    if defaults["sampler"] not in sampler_ids:
+        raise PackError(f"T2I pack: model {model_id} default sampler `{defaults['sampler']}` is not in options.samplers.")
+    if defaults["scheduler"] not in scheduler_ids:
+        raise PackError(
+            f"T2I pack: model {model_id} default scheduler `{defaults['scheduler']}` is not in options.schedulers."
+        )
+
+    return {
+        "id": model_id,
+        "catalogId": str(raw.get("catalogId") or ""),
+        "label": _text(raw.get("label"), f"models.{model_id}.label"),
+        "shortLabel": str(raw.get("shortLabel") or raw.get("label") or model_id),
+        "family": str(raw.get("family") or ""),
+        "base": _text(raw.get("base"), f"models.{model_id}.base"),
+        "description": str(raw.get("description") or ""),
+        "loader": loader,
+        "file": _text(raw.get("file"), f"models.{model_id}.file"),
+        "target": _text(raw.get("target"), f"models.{model_id}.target"),
+        "weightDtype": raw.get("weightDtype"),
+        "textEncoder": _text(raw.get("textEncoder"), f"models.{model_id}.textEncoder"),
+        "textEncoderTarget": str(raw.get("textEncoderTarget") or "text_encoders"),
+        "clipType": _text(raw.get("clipType"), f"models.{model_id}.clipType"),
+        "vae": _text(raw.get("vae"), f"models.{model_id}.vae"),
+        "vaeTarget": str(raw.get("vaeTarget") or "vae"),
+        "vram": str(raw.get("vram") or ""),
+        "capabilities": [str(item) for item in (raw.get("capabilities") or [])],
+        "verified": _bool(raw.get("verified"), False),
+        "tested": _bool(raw.get("tested"), False),
+        "notes": str(raw.get("notes") or ""),
+        "defaults": defaults,
+        "ranges": ranges,
+    }
+
+
+def _clean_lora(raw: Any) -> dict:
+    if not isinstance(raw, dict):
+        raise PackError("T2I pack: every loras[] item must be an object.")
+    lora_id = _text(raw.get("id"), "loras[].id")
+    base = _text(raw.get("base"), f"loras.{lora_id}.base")
+    triggers: list[str] = []
+    seen: set[str] = set()
+    for value in raw.get("triggers") or []:
+        text = str(value).strip()
+        if not text:
+            continue
+        key = " ".join(text.lower().split())
+        if key in seen:
+            continue
+        seen.add(key)
+        triggers.append(text)
+    return {
+        "id": lora_id,
+        "label": _text(raw.get("label"), f"loras.{lora_id}.label"),
+        "file": _text(raw.get("file"), f"loras.{lora_id}.file"),
+        "base": base,
+        "compatibleBases": [str(item) for item in (raw.get("compatibleBases") or [base])],
+        "family": str(raw.get("family") or ""),
+        "type": str(raw.get("type") or "style"),
+        "t2i": _bool(raw.get("t2i"), True),
+        "excludeReason": str(raw.get("excludeReason") or ""),
+        "verified": _bool(raw.get("verified"), False),
+        "tested": _bool(raw.get("tested"), False),
+        "defaultOrder": int(raw.get("defaultOrder") or 0),
+        "triggers": triggers,
+        "strength": clean_range(raw.get("strength"), f"loras.{lora_id}.strength"),
+        "notes": str(raw.get("notes") or ""),
+    }
+
+
+def _clean_upscaler(raw: Any) -> dict:
+    if not isinstance(raw, dict):
+        raise PackError("T2I pack: every upscalers[] item must be an object.")
+    upscaler_id = _text(raw.get("id"), "upscalers[].id")
+    kind = _text(raw.get("kind"), f"upscalers.{upscaler_id}.kind")
+    if kind not in {"none", "latent", "esrgan"}:
+        raise PackError(f"T2I pack: unsupported upscaler kind `{kind}`.")
+    value_range = raw.get("valueRange")
+    return {
+        "id": upscaler_id,
+        "label": _text(raw.get("label"), f"upscalers.{upscaler_id}.label"),
+        "shortLabel": str(raw.get("shortLabel") or raw.get("label") or upscaler_id),
+        "kind": kind,
+        "file": raw.get("file"),
+        "target": raw.get("target"),
+        "scaleFactor": int(raw.get("scaleFactor") or 1),
+        "enabledByDefault": _bool(raw.get("enabledByDefault"), False),
+        "defaultValue": raw.get("defaultValue"),
+        "valueRange": clean_range(value_range, f"upscalers.{upscaler_id}.valueRange") if value_range else None,
+        "t2i": _bool(raw.get("t2i"), True),
+        "verified": _bool(raw.get("verified"), False),
+        "tested": _bool(raw.get("tested"), False),
+        "notes": str(raw.get("notes") or ""),
+    }
+
+
+def _clean_text_model(raw: Any) -> dict:
+    if not isinstance(raw, dict):
+        raise PackError("T2I pack: every text_models.comfyui[] item must be an object.")
+    text_id = _text(raw.get("id"), "text_models.comfyui[].id")
+    return {
+        "id": text_id,
+        "label": _text(raw.get("label"), f"text_models.{text_id}.label"),
+        "provider": "comfyui",
+        "file": _text(raw.get("file"), f"text_models.{text_id}.file"),
+        "target": str(raw.get("target") or "text_encoders"),
+        "clipType": _text(raw.get("clipType"), f"text_models.{text_id}.clipType"),
+        "node": str(raw.get("node") or "TextGenerate"),
+        "maxLength": int(raw.get("maxLength") or 512),
+        "verified": _bool(raw.get("verified"), False),
+        "tested": _bool(raw.get("tested"), False),
+        "vram": str(raw.get("vram") or ""),
+        "notes": str(raw.get("notes") or ""),
+    }
+
+
+def _validate_workflow(workflow: Any) -> dict:
+    if not isinstance(workflow, dict) or not workflow:
+        raise PackError("T2I pack: the workflow must be a non-empty API-format object.")
+    required = {"1", "2", "3", "4", "5", "6", "7", "11"}
+    missing = sorted(required - set(workflow))
+    if missing:
+        raise PackError(f"T2I pack: workflow is missing required node ids: {', '.join(missing)}")
+    for node_id, node in workflow.items():
+        if not isinstance(node, dict) or not isinstance(node.get("class_type"), str):
+            raise PackError(f"T2I pack: workflow node {node_id} has no class_type.")
+        if not isinstance(node.get("inputs"), dict):
+            raise PackError(f"T2I pack: workflow node {node_id} has no inputs object.")
+        class_type = node["class_type"]
+        if "IAMCCS" in class_type or "Switch" in class_type:
+            raise PackError(
+                f"T2I pack: workflow node {node_id} uses `{class_type}`. "
+                "T2I_main forbids switch nodes; prune the graph instead."
+            )
+    return workflow
+
+
+def _clean_options(raw: dict) -> dict:
+    recipe = raw.get("recipe") or {}
+    defaults = raw.get("defaults") or {}
+    size = raw.get("size") or {}
+    limits = raw.get("limits") or {}
+    enhance = raw.get("enhance") or {}
+    if not isinstance(recipe, dict) or not isinstance(defaults, dict):
+        raise PackError("T2I pack: options.recipe/defaults must be objects.")
+
+    ratios: list[dict] = []
+    seen_ratios: set[str] = set()
+    for item in raw.get("ratios") or []:
+        if not isinstance(item, dict):
+            raise PackError("T2I pack: options.ratios[] items must be objects.")
+        ratio_id = _text(item.get("id"), "options.ratios[].id")
+        if ratio_id in seen_ratios:
+            raise PackError(f"T2I pack: duplicate ratio id `{ratio_id}`.")
+        seen_ratios.add(ratio_id)
+        w = _number(item.get("w"), f"options.ratios.{ratio_id}.w")
+        h = _number(item.get("h"), f"options.ratios.{ratio_id}.h")
+        if w <= 0 or h <= 0:
+            raise PackError(f"T2I pack: ratio `{ratio_id}` needs positive w/h.")
+        ratios.append({"id": ratio_id, "label": str(item.get("label") or ratio_id), "w": w, "h": h, "value": w / h})
+
+    samplers = []
+    for item in raw.get("samplers") or []:
+        if not isinstance(item, dict):
+            raise PackError("T2I pack: options.samplers[] items must be objects.")
+        samplers.append({"id": _text(item.get("id"), "options.samplers[].id"), "label": str(item.get("label") or item.get("id"))})
+    schedulers = []
+    for item in raw.get("schedulers") or []:
+        if not isinstance(item, dict):
+            raise PackError("T2I pack: options.schedulers[] items must be objects.")
+        schedulers.append(
+            {"id": _text(item.get("id"), "options.schedulers[].id"), "label": str(item.get("label") or item.get("id"))}
+        )
+    if not ratios or not samplers or not schedulers:
+        raise PackError("T2I pack: options.ratios, options.samplers and options.schedulers are required.")
+
+    values = [int(value) for value in (size.get("values") or [])]
+    step = int(size.get("step") or 64)
+    if step <= 0 or not values:
+        raise PackError("T2I pack: options.size.values and a positive step are required.")
+
+    return {
+        "version": int(raw.get("version") or 1),
+        "recipe": {
+            "id": _text(recipe.get("id"), "options.recipe.id"),
+            "label": _text(recipe.get("label"), "options.recipe.label"),
+            "workflow": _text(recipe.get("workflow"), "options.recipe.workflow"),
+            "engine": str(recipe.get("engine") or "comfyui"),
+            "description": str(recipe.get("description") or ""),
+        },
+        "defaults": defaults,
+        "ratios": ratios,
+        "size": {
+            "label": str(size.get("label") or "Size"),
+            "longSideDefault": int(size.get("longSideDefault") or 1024),
+            "step": step,
+            "values": sorted(set(values)),
+            "description": str(size.get("description") or ""),
+        },
+        "samplers": samplers,
+        "schedulers": schedulers,
+        "limits": {
+            "promptMaxChars": int(limits.get("promptMaxChars") or 8000),
+            "negativePromptMaxChars": int(limits.get("negativePromptMaxChars") or 4000),
+            "maxLoras": int(limits.get("maxLoras") or 8),
+            "jobTimeoutSeconds": int(limits.get("jobTimeoutSeconds") or 1800),
+            "pollIntervalSeconds": float(limits.get("pollIntervalSeconds") or 1.0),
+            "historyTimeoutSeconds": float(limits.get("historyTimeoutSeconds") or 15),
+            "enhanceTimeoutSeconds": float(limits.get("enhanceTimeoutSeconds") or 240),
+            "downloadTimeoutSeconds": float(limits.get("downloadTimeoutSeconds") or 120),
+            "downloadRetries": int(limits.get("downloadRetries") or 3),
+        },
+        "enhance": {
+            "systemPromptKey": str(enhance.get("systemPromptKey") or "enhance"),
+            "defaultProvider": str(enhance.get("defaultProvider") or "ollama"),
+            "ollama": {
+                "temperature": float((enhance.get("ollama") or {}).get("temperature") or 0.7),
+                "numPredict": int((enhance.get("ollama") or {}).get("numPredict") or 512),
+                "timeoutSeconds": float((enhance.get("ollama") or {}).get("timeoutSeconds") or 240),
+            },
+            "comfyui": {
+                "maxLength": int((enhance.get("comfyui") or {}).get("maxLength") or 512),
+                "temperature": float((enhance.get("comfyui") or {}).get("temperature") or 0.7),
+                "topK": int((enhance.get("comfyui") or {}).get("topK") or 64),
+                "topP": float((enhance.get("comfyui") or {}).get("topP") or 0.95),
+                "minP": float((enhance.get("comfyui") or {}).get("minP") or 0.05),
+                "repetitionPenalty": float((enhance.get("comfyui") or {}).get("repetitionPenalty") or 1.05),
+                "presencePenalty": float((enhance.get("comfyui") or {}).get("presencePenalty") or 0.0),
+                "timeoutSeconds": float((enhance.get("comfyui") or {}).get("timeoutSeconds") or 240),
+            },
+        },
+    }
+
+
+def load_pack() -> dict:
+    """Load and validate the complete tracked T2I pack."""
+    options = _clean_options(_read_json("options.json"))
+    models_raw = _read_json("models.json")
+    loras_raw = _read_json("loras.json")
+    upscalers_raw = _read_json("upscalers.json")
+    text_raw = _read_json("text_models.json")
+
+    models: dict[str, dict] = {}
+    for item in models_raw.get("models") or []:
+        model = _clean_model(item, options)
+        if model["id"] in models:
+            raise PackError(f"T2I pack: duplicate model id `{model['id']}`.")
+        models[model["id"]] = model
+
+    loras: dict[str, dict] = {}
+    for item in loras_raw.get("loras") or []:
+        lora = _clean_lora(item)
+        if lora["id"] in loras:
+            raise PackError(f"T2I pack: duplicate LoRA id `{lora['id']}`.")
+        loras[lora["id"]] = lora
+
+    upscalers: dict[str, dict] = {}
+    for item in upscalers_raw.get("upscalers") or []:
+        upscaler = _clean_upscaler(item)
+        if upscaler["id"] in upscalers:
+            raise PackError(f"T2I pack: duplicate upscaler id `{upscaler['id']}`.")
+        upscalers[upscaler["id"]] = upscaler
+
+    comfy_text_models: dict[str, dict] = {}
+    for item in text_raw.get("comfyui") or []:
+        text_model = _clean_text_model(item)
+        if text_model["id"] in comfy_text_models:
+            raise PackError(f"T2I pack: duplicate ComfyUI text model id `{text_model['id']}`.")
+        comfy_text_models[text_model["id"]] = text_model
+
+    ollama_raw = text_raw.get("ollama") or {}
+    if not isinstance(ollama_raw, dict):
+        raise PackError("T2I pack: text_models.ollama must be an object.")
+    ollama_text = {
+        "autoDiscover": _bool(ollama_raw.get("autoDiscover"), True),
+        "preferred": [str(item).strip() for item in (ollama_raw.get("preferred") or []) if str(item).strip()],
+        "notes": str(ollama_raw.get("notes") or ""),
+    }
+
+    workflow = _validate_workflow(_read_json("workflows/krea2_t2i.api.json"))
+    defaults = options["defaults"]
+    if defaults.get("modelId") not in models:
+        raise PackError(f"T2I pack: options.defaults.modelId `{defaults.get('modelId')}` is not a model.")
+    upscaler_default = defaults.get("upscaler") or {}
+    if upscaler_default.get("id") not in upscalers:
+        raise PackError("T2I pack: options.defaults.upscaler.id is not a known upscaler.")
+    for ref in defaults.get("loraChain") or []:
+        if not isinstance(ref, dict) or ref.get("id") not in loras:
+            raise PackError(f"T2I pack: default LoRA chain references unknown id `{ref}`.")
+
+    return {
+        "version": int(options["version"]),
+        "options": options,
+        "recipe": options["recipe"],
+        "models": models,
+        "loras": loras,
+        "upscalers": upscalers,
+        "comfyTextModels": comfy_text_models,
+        "ollamaText": ollama_text,
+        "workflow": workflow,
+    }
+
+
+# -- user catalog merge ---------------------------------------------------------
+
+
+def load_user_catalog() -> dict:
+    """Read the user-owned catalog for presence/triggers; never raise."""
+    try:
+        raw = user_catalog.load_catalog()
+        models = raw.get("models") if isinstance(raw.get("models"), dict) else {}
+        loras = raw.get("loras") if isinstance(raw.get("loras"), dict) else {}
+        return {
+            "available": bool(models or loras),
+            "models": models,
+            "loras": loras,
+            "createdAt": raw.get("createdAt"),
+            "updatedAt": raw.get("updatedAt"),
+            "source": raw.get("source") if isinstance(raw.get("source"), dict) else {},
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001 - a broken user catalog must not break T2I
+        return {
+            "available": False,
+            "models": {},
+            "loras": {},
+            "createdAt": None,
+            "updatedAt": None,
+            "source": {},
+            "error": str(exc),
+        }
+
+
+def _index_catalog(cat: dict) -> dict:
+    models = cat.get("models") or {}
+    loras = cat.get("loras") or {}
+    return {
+        "modelsById": {str(entry.get("id")): entry for entry in models.values() if isinstance(entry, dict)},
+        "modelsByKey": {
+            (str(entry.get("target") or ""), str(entry.get("name") or "")): entry
+            for entry in models.values()
+            if isinstance(entry, dict)
+        },
+        "modelsByName": {str(entry.get("name")): entry for entry in models.values() if isinstance(entry, dict)},
+        "lorasById": {str(entry.get("id")): entry for entry in loras.values() if isinstance(entry, dict)},
+        "lorasByKey": {
+            (str(entry.get("target") or ""), str(entry.get("name") or "")): entry
+            for entry in loras.values()
+            if isinstance(entry, dict)
+        },
+        "lorasByName": {str(entry.get("name")): entry for entry in loras.values() if isinstance(entry, dict)},
+    }
+
+
+def _find_model(index: dict, catalog_id: str, file: str, target: str) -> dict | None:
+    if catalog_id and catalog_id in index["modelsById"]:
+        return index["modelsById"][catalog_id]
+    return index["modelsByKey"].get((target, file)) or index["modelsByName"].get(file)
+
+
+def _find_lora(index: dict, lora_id: str, file: str) -> dict | None:
+    if lora_id and lora_id in index["lorasById"]:
+        return index["lorasById"][lora_id]
+    return index["lorasByKey"].get(("loras", file)) or index["lorasByName"].get(file)
+
+
+def _component(index: dict, name: str, target: str, role: str, *, available: bool) -> dict:
+    entry = index["modelsByKey"].get((target, name)) or index["modelsByName"].get(name)
+    if entry is not None:
+        present = bool(entry.get("present"))
+        catalog_id = str(entry.get("id") or "")
+    elif available:
+        present = False
+        catalog_id = ""
+    else:
+        present = None
+        catalog_id = ""
+    return {
+        "role": role,
+        "name": name,
+        "target": target,
+        "present": present,
+        "catalogId": catalog_id,
+    }
+
+
+def _lora_state(lora: dict, index: dict, available: bool) -> dict:
+    entry = _find_lora(index, lora["id"], lora["file"])
+    if entry is not None:
+        present = bool(entry.get("present"))
+        triggers = [str(item) for item in (entry.get("triggers") or [])]
+    elif available:
+        present = False
+        triggers = list(lora["triggers"])
+    else:
+        present = None
+        triggers = list(lora["triggers"])
+    return {
+        **lora,
+        "present": present,
+        "triggers": triggers,
+        "catalogId": str(entry.get("id") or "") if entry else "",
+        "catalogLabel": str(entry.get("label") or "") if entry else "",
+    }
+
+
+def _model_state(model: dict, index: dict, available: bool) -> dict:
+    components = [
+        _component(index, model["file"], model["target"], "diffusion", available=available),
+        _component(index, model["textEncoder"], model["textEncoderTarget"], "text_encoder", available=available),
+        _component(index, model["vae"], model["vaeTarget"], "vae", available=available),
+    ]
+    main = components[0]
+    missing = [item["name"] for item in components if item["present"] is False]
+    return {
+        **model,
+        "present": main["present"],
+        "ready": not missing,
+        "missing": missing,
+        "components": components,
+        "catalogIdFound": main["catalogId"],
+    }
+
+
+def _upscaler_state(upscaler: dict, index: dict, available: bool) -> dict:
+    if not upscaler.get("file"):
+        return {**upscaler, "present": True, "missing": [], "components": []}
+    component = _component(
+        index, str(upscaler["file"]), str(upscaler.get("target") or ""), "upscaler", available=available
+    )
+    return {
+        **upscaler,
+        "present": component["present"],
+        "missing": [] if component["present"] is not False else [component["name"]],
+        "components": [component],
+    }
+
+
+def build_snapshot(
+    pack: dict,
+    user: dict | None = None,
+    *,
+    model_id: str | None = None,
+    engine: dict | None = None,
+    text_models: list[dict] | None = None,
+    defaults_extra: dict | None = None,
+) -> dict:
+    """Merge pack + user catalog + live engine status into the GUI contract."""
+    user = user or load_user_catalog()
+    index = _index_catalog(user)
+    available = bool(user.get("available"))
+    models = [_model_state(model, index, available) for model in pack["models"].values()]
+    loras = [_lora_state(lora, index, available) for lora in pack["loras"].values()]
+    upscalers = [_upscaler_state(item, index, available) for item in pack["upscalers"].values()]
+
+    for model in models:
+        model["compatibleLoras"] = [
+            lora["id"]
+            for lora in loras
+            if lora["t2i"] and (model["base"] in lora["compatibleBases"] or lora["base"] == model["base"])
+        ]
+        model["samplers"] = pack["options"]["samplers"]
+        model["schedulers"] = pack["options"]["schedulers"]
+
+    for lora in loras:
+        lora["compatibleModels"] = [
+            model["id"]
+            for model in models
+            if model["base"] in lora["compatibleBases"] or lora["base"] == model["base"]
+        ]
+        lora["available"] = bool(lora["t2i"] and lora["compatibleModels"])
+
+    default_chain = []
+    for ref in pack["options"]["defaults"].get("loraChain") or []:
+        lora = next((item for item in loras if item["id"] == ref.get("id")), None)
+        if not lora:
+            continue
+        default_chain.append(
+            {
+                "id": lora["id"],
+                "label": lora["label"],
+                "strength": float(ref.get("strength", lora["strength"]["default"])),
+                "on": bool(ref.get("on", True)),
+                "triggers": lora["triggers"],
+                "present": lora["present"],
+            }
+        )
+
+    selected_model = None
+    if model_id:
+        selected_model = next((item for item in models if item["id"] == model_id), None)
+        if selected_model is None:
+            raise KeyError(f"Unknown model `{model_id}`.")
+    if selected_model is None:
+        default_id = pack["options"]["defaults"].get("modelId")
+        selected_model = next((item for item in models if item["id"] == default_id), models[0] if models else None)
+
+    if text_models is None:
+        text_models = []
+        for item in pack["comfyTextModels"].values():
+            state = _component(index, item["file"], item["target"], "text_encoder", available=available)
+            text_models.append({**item, "present": state["present"], "catalogId": state["catalogId"]})
+
+    defaults = dict(pack["options"]["defaults"])
+    defaults["loraChain"] = default_chain
+    if selected_model:
+        defaults["modelId"] = selected_model["id"]
+        defaults["steps"] = selected_model["defaults"]["steps"]
+        defaults["cfg"] = selected_model["defaults"]["cfg"]
+        defaults["sampler"] = selected_model["defaults"]["sampler"]
+        defaults["scheduler"] = selected_model["defaults"]["scheduler"]
+        defaults["denoise"] = selected_model["defaults"]["denoise"]
+        defaults["refine"] = {
+            key: selected_model["ranges"]["refine"][key]["default"] for key in REFINE_RANGE_KEYS
+        }
+    if defaults_extra:
+        defaults.update(defaults_extra)
+
+    warnings: list[dict] = []
+    if user.get("error"):
+        warnings.append(
+            {
+                "code": "user_catalog_error",
+                "message": f"Model catalog could not be read; presence checks are unknown. {user['error']}",
+            }
+        )
+    elif not available:
+        warnings.append(
+            {
+                "code": "user_catalog_empty",
+                "message": "No model catalog yet. Presence is unknown; build it in Settings -> Model catalog for accurate checks.",
+            }
+        )
+    for model in models:
+        if model["present"] is False:
+            warnings.append(
+                {
+                    "code": "model_missing",
+                    "modelId": model["id"],
+                    "message": f"{model['label']} is missing: {', '.join(model['missing'])}",
+                }
+            )
+        elif not model["tested"]:
+            warnings.append(
+                {
+                    "code": "model_untested",
+                    "modelId": model["id"],
+                    "message": f"{model['label']} is implemented but not yet live-tested.",
+                }
+            )
+    for lora in loras:
+        if lora["t2i"] and lora["present"] is False:
+            warnings.append(
+                {
+                    "code": "lora_missing",
+                    "loraId": lora["id"],
+                    "message": f"LoRA file is missing: {lora['file']}",
+                }
+            )
+
+    return {
+        "ok": True,
+        "recipe": pack["recipe"],
+        "workflow": {
+            "path": pack["recipe"]["workflow"],
+            "nodeCount": len(pack["workflow"]),
+            "format": "comfyui-api",
+        },
+        "models": models,
+        "selectedModelId": selected_model["id"] if selected_model else None,
+        "loras": sorted(loras, key=lambda item: (item["defaultOrder"], item["label"].lower())),
+        "upscalers": upscalers,
+        "textModels": text_models,
+        "ratios": pack["options"]["ratios"],
+        "size": pack["options"]["size"],
+        "samplers": pack["options"]["samplers"],
+        "schedulers": pack["options"]["schedulers"],
+        "limits": pack["options"]["limits"],
+        "defaults": defaults,
+        "engine": engine or {},
+        "catalog": {
+            "available": available,
+            "updatedAt": user.get("updatedAt"),
+            "createdAt": user.get("createdAt"),
+            "source": user.get("source") or {},
+            "error": user.get("error"),
+        },
+        "warnings": warnings,
+    }

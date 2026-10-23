@@ -1,0 +1,155 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": { "title": "Krea 2 Turbo (int8)" }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "type": "krea2",
+      "device": "default"
+    },
+    "_meta": { "title": "Qwen3-VL 4B text encoder" }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "_meta": { "title": "Qwen Image VAE" }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 0],
+      "text": "A cinematic portrait of a woman in a sunlit room, natural light, detailed skin, shallow depth of field"
+    },
+    "_meta": { "title": "Positive prompt" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 0],
+      "text": ""
+    },
+    "_meta": { "title": "Negative prompt" }
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": { "title": "Empty latent" }
+  },
+  "20": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["1", 0],
+      "lora_name": "xCreampiex_krea2_v1.1_000002500.safetensors",
+      "strength_model": 1.0
+    },
+    "_meta": { "title": "LoRA 1 - xCreampiex 1.0" }
+  },
+  "21": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["20", 0],
+      "lora_name": "KREA2_G4NGB4NG_V1.safetensors",
+      "strength_model": 2.0
+    },
+    "_meta": { "title": "LoRA 2 - G4NGB4NG 2.0" }
+  },
+  "22": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["21", 0],
+      "lora_name": "MysticXXX_KREA2_v3.safetensors",
+      "strength_model": 0.7
+    },
+    "_meta": { "title": "LoRA 3 - MysticXXX 0.7" }
+  },
+  "23": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["22", 0],
+      "lora_name": "Krea_2_Mombod_epoch_7.safetensors",
+      "strength_model": 0.6
+    },
+    "_meta": { "title": "LoRA 4 - Mombod 0.6" }
+  },
+  "24": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": ["23", 0],
+      "lora_name": "realism_engine_krea2_v3.1.safetensors",
+      "strength_model": 0.6
+    },
+    "_meta": { "title": "LoRA 5 - Realism Engine 0.6" }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["24", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["6", 0],
+      "seed": 0,
+      "steps": 12,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0
+    },
+    "_meta": { "title": "Base sampler (Freeze v8: 12 / 2.5 / euler / simple / 1.0)" }
+  },
+  "8": {
+    "class_type": "LatentUpscale",
+    "inputs": {
+      "samples": ["7", 0],
+      "upscale_method": "nearest-exact",
+      "width": 1536,
+      "height": 1536,
+      "crop": "disabled"
+    },
+    "_meta": { "title": "Refine latent upscale (1536)" }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["24", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["8", 0],
+      "seed": 1,
+      "steps": 6,
+      "cfg": 2.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 0.45
+    },
+    "_meta": { "title": "Refine sampler (Freeze v8: 6 / 2.0 / 0.45)" }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["3", 0]
+    },
+    "_meta": { "title": "Decode refined latent" }
+  },
+  "11": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["10", 0],
+      "filename_prefix": "T2I_main/krea2"
+    },
+    "_meta": { "title": "Save image" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "T2I_main",
+  "navId": "text-to-image",
+  "name": "Text -> Image",
+  "group": "image",
+  "version": "0.1.0",
+  "status": "installed",
+  "description": "Strict Text -> Image module for Krea 2 Turbo: model selection, per-model ranges, LoRA chaining, latent refine, optional 4x-UltraSharp and Ollama/ComfyUI prompt enhancement.",
+  "entrypoint": "backend.api:router",
+  "apiPrefix": "/api/t2i",
+  "frontend": "frontend/T2IPage.vue",
+  "recipeIds": ["krea2-t2i-v1"],
+  "capabilities": ["t2i", "lora", "refine", "esrgan", "prompt-enhance"],
+  "excludes": ["identity", "reference-image", "describe", "image-to-image", "edit-image", "face-swap"]
+}
