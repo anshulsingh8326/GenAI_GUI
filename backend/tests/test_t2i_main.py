@@ -17,6 +17,7 @@ from app.main import app
 from app.jobs import service as jobs
 from app.GenModules.T2I_main.backend import catalog, service, workflows
 from app.GenModules.T2I_main.backend.schema import T2IJobRequest
+from app.library import placeholders, service as library
 
 client = TestClient(app)
 
@@ -249,3 +250,79 @@ def test_runner_persists_a_readable_offline_error(monkeypatch: pytest.MonkeyPatc
     submit = next(stage for stage in job["stages"] if stage["id"] == "submit")
     assert submit["status"] == "error"
     assert "ComfyUI is not reachable" in submit["detail"]
+
+
+def _completed_t2i_job_with_asset(name: str) -> tuple[dict, dict]:
+    data = placeholders.make_placeholder_png(f"delete-{name}", 0, 64, 64)
+    asset = library.add_bytes(
+        data,
+        f"delete-{name}.png",
+        label=name,
+        prompt=name,
+        tags=["test"],
+        origin_job="pending",
+    )
+    job = jobs.create_job(
+        {
+            "tab": "text-to-image",
+            "module": "T2I_main",
+            "prompt": name,
+            "modelId": "krea2-turbo-int8",
+            "modelName": "Krea 2 Turbo",
+            "seed": 42,
+            "params": {},
+            "stages": [],
+        }
+    )
+    jobs.update_job(
+        job["id"],
+        {"status": "done", "progress": 100, "resultIds": [asset["id"]]},
+    )
+    return service.get_job(job["id"]), asset
+
+
+def test_delete_job_moves_assets_to_trash_and_soft_deletes() -> None:
+    job, asset = _completed_t2i_job_with_asset("with-assets")
+    assert job is not None
+
+    result = service.delete_job(job["id"], delete_assets=True)
+
+    assert result is not None
+    assert result["deleted"] is True
+    assert result["assetsTrashed"] == [asset["id"]]
+    assert service.get_job(job["id"]) is None
+    assert library.get_asset(asset["id"]) is None
+    # Audit record stays in SQLite, hidden from normal reads.
+    hidden = jobs.get_job(job["id"], include_deleted=True)
+    assert hidden is not None and hidden["status"] == "done"
+
+
+def test_delete_job_can_keep_assets_and_http_contract() -> None:
+    job, asset = _completed_t2i_job_with_asset("keep-assets")
+    assert job is not None
+
+    response = client.delete(
+        f"/api/t2i/jobs/{job['id'].replace('#', '%23')}?deleteAssets=false"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["assetsTrashed"] == []
+    assert service.get_job(job["id"]) is None
+    assert library.get_asset(asset["id"]) is not None
+    assert client.get(f"/api/t2i/jobs/{job['id'].replace('#', '%23')}").status_code == 404
+
+
+def test_delete_running_job_is_rejected() -> None:
+    running = jobs.create_job(
+        {
+            "tab": "text-to-image",
+            "module": "T2I_main",
+            "prompt": "still running",
+            "params": {},
+            "stages": [],
+        }
+    )
+    with pytest.raises(service.ValidationError) as info:
+        service.delete_job(running["id"], delete_assets=False)
+    assert info.value.errors[0]["code"] == "job_running"
+    jobs.delete_job(running["id"])

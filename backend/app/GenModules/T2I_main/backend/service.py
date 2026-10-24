@@ -2026,6 +2026,44 @@ async def cancel_job(job_id: str) -> dict | None:
     return jobs.get_job(job_id) or job
 
 
+def delete_job(job_id: str, *, delete_assets: bool = True) -> dict | None:
+    """Remove a terminal job from history.
+
+    Job rows are soft-deleted so the audit trail survives; when `delete_assets`
+    is true, each result asset is moved to the library trash using the same
+    restore path as a manual library delete. Running jobs must be cancelled
+    first, which keeps the runner from writing to a hidden record.
+    """
+    job = get_job(job_id)
+    if job is None:
+        return None
+    if job["status"] in {"queued", "running"}:
+        raise ValidationError(
+            [_issue("job_running", "Cancel this job before deleting it.", "jobId")]
+        )
+
+    trashed: list[str] = []
+    missing: list[str] = []
+    if delete_assets:
+        for asset_id in job.get("resultIds") or []:
+            asset = library.trash_asset(str(asset_id))
+            if asset is None:
+                missing.append(str(asset_id))
+            else:
+                trashed.append(str(asset["id"]))
+
+    if not jobs.delete_job(job_id):
+        return None
+    _CANCEL.pop(job_id, None)
+    _TASKS.pop(job_id, None)
+    return {
+        "id": job_id,
+        "deleted": True,
+        "assetsTrashed": trashed,
+        "assetsMissing": missing,
+    }
+
+
 async def resume_pending_jobs() -> None:
     """Reattach to ComfyUI prompts persisted in running jobs (best effort)."""
     try:

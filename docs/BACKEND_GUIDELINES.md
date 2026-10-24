@@ -1,13 +1,14 @@
 # Backend Guidelines — GenAI GUI (FastAPI)
 
-Version 0.1 (post-Group 3: settings, connectors, library and jobs are real; execution is
-still simulated in the GUI). This is the authoritative reference for building **any new
-backend piece** — the next act is `GenModules/text-to-image` and the ComfyUI pipeline.
-Follow it in every session so all modules behave like one product. If something here blocks
-a design, change this doc in the same session.
+Version 0.2 (post-T2I_main: settings, connectors, library, jobs and Text -> Image execution
+are real; other generation tabs are still mock). This is the authoritative reference for
+building **any new backend piece** - the next act is the next GenModule and its ComfyUI
+pipeline. Follow it in every session so all modules behave like one product. If something
+here blocks a design, change this doc in the same session.
 
-Companion docs: `docs/GUI_GUIDELINES.md` (frontend counterpart) · `docs/PLAN.md`
-(architecture, §7 tree, §8 feature ladder) · `backend/README.md` (endpoint tables).
+Companion docs: `docs/GUI_GUIDELINES.md` (frontend counterpart) · `docs/GENMODULE_GUIDE.md`
+(reusable module architecture) · `docs/PLAN.md` (architecture, §7 tree, §8 feature ladder) ·
+`backend/README.md` (endpoint tables).
 
 ---
 
@@ -95,8 +96,9 @@ Everything lives under `<repo>/data` (override: `GENAI_DATA_DIR`):
 - Engine outputs enter the library only through `library.service.add_file/add_bytes`, which
   hashes, measures, and stores metadata. Result ids go into the job's `resultIds`.
 - **Mock phase marker:** `POST /api/jobs/{id}/mock-complete`, `library/placeholders.py`,
-  `frontend/src/lib/mockApi.ts#runJob` and the GUI "MOCK DATA" badge all disappear in the
-  same commit that lands real execution. Do not build new features on them.
+  `frontend/src/lib/mockApi.ts#runJob` and the top-bar live/mock badge remain only for tabs
+  that are still mock. `T2I_main` never uses them. Remove them when the last mock generation
+  tab is replaced; do not build new features on them.
 
 ## 5. Settings contract
 

@@ -71,7 +71,7 @@ const groupIcons: Record<string, any> = {
     <div class="border-t border-border px-4 py-3">
       <p class="text-[10px] leading-relaxed text-muted">
         Settings, folders and connections persist to the backend.<br />
-        Generation modules are still mock data.
+        T2I_main is live; other generation modules are mock.
       </p>
     </div>
   </aside>

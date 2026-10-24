@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   params_json   TEXT,
   stages_json   TEXT,
   result_ids_json TEXT,
-  error         TEXT
+  error         TEXT,
+  deleted_at    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -96,6 +97,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
     if "progress" not in job_columns:
         conn.execute("ALTER TABLE jobs ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
+    if "deleted_at" not in job_columns:
+        conn.execute("ALTER TABLE jobs ADD COLUMN deleted_at INTEGER")
 
 
 def table_names() -> list[str]:

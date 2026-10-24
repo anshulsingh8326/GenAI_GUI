@@ -6,7 +6,7 @@ import { useUiStore } from './ui'
 
 // Backend-first asset store. `GET /api/assets` is the source of truth: imported
 // files, files dropped into the library folder, and outputs written by the
-// (still mock) pipeline. Mutations go through the API; assets created while the
+// T2I_main pipeline. Mutations go through the API; assets created while the
 // backend is offline live in this list for the session only.
 
 /** Session-only assets (offline mock results) are data URIs - no DB row behind them. */
@@ -25,12 +25,14 @@ export const useLibraryStore = defineStore('library', () => {
   }
 
   /** Replace the cache with the backend list; failures keep the current list. */
-  async function syncFromBackend(): Promise<void> {
+  async function syncFromBackend(): Promise<boolean> {
     try {
       assets.value = await api.getAssets({ limit: 500 })
       loaded.value = true
+      return true
     } catch {
       /* backend offline - keep whatever is cached / session-only */
+      return false
     }
   }
 

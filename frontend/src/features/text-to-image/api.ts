@@ -4,8 +4,9 @@
  * Same-origin only: `/api/t2i/...` is proxied by Vite in dev and served by
  * FastAPI in production. No base URL or CORS configuration is needed.
  *
- * Copy this file to frontend/src/features/text-to-image/ with `types.ts` when
- * the visual GUI is implemented.
+ * This file is the canonical module contract under
+ * backend/app/GenModules/T2I_main/frontend/ and is copied into
+ * frontend/src/features/text-to-image/ by the integration step.
  */
 
 import type {
@@ -13,6 +14,7 @@ import type {
   T2IEnhanceResponse,
   T2IJobRecord,
   T2IJobRequest,
+  T2IJobDeleteResult,
   T2IPackInfo,
   T2IValidationIssue,
   T2IValidationResult,
@@ -186,6 +188,14 @@ export const t2iApi = {
       method: 'POST',
       signal,
     })
+  },
+
+  /** Hide a terminal job; `deleteAssets` moves its result images to library trash. */
+  deleteJob(jobId: string, deleteAssets = true, signal?: AbortSignal): Promise<T2IJobDeleteResult> {
+    return request<T2IJobDeleteResult>(
+      `/jobs/${encodeURIComponent(jobId)}?deleteAssets=${deleteAssets ? 'true' : 'false'}`,
+      { method: 'DELETE', signal },
+    )
   },
 }
 

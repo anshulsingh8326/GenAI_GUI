@@ -111,9 +111,12 @@ def create_job(payload: dict) -> dict:
     return job
 
 
-def get_job(job_id: str) -> dict | None:
+def get_job(job_id: str, *, include_deleted: bool = False) -> dict | None:
+    query = "SELECT * FROM jobs WHERE id = ?"
+    if not include_deleted:
+        query += " AND deleted_at IS NULL"
     with db.connection() as conn:
-        row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        row = conn.execute(query, (job_id,)).fetchone()
     return _row_to_job(row) if row else None
 
 
@@ -121,12 +124,14 @@ def list_jobs(limit: int = 80, module: str | None = None) -> list[dict]:
     with db.connection() as conn:
         if module:
             rows = conn.execute(
-                "SELECT * FROM jobs WHERE module = ? ORDER BY created_at DESC LIMIT ?",
+                "SELECT * FROM jobs WHERE module = ? AND deleted_at IS NULL "
+                "ORDER BY created_at DESC LIMIT ?",
                 (module, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+                "SELECT * FROM jobs WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?",
+                (limit,),
             ).fetchall()
     return [_row_to_job(r) for r in rows]
 
@@ -134,12 +139,36 @@ def list_jobs(limit: int = 80, module: str | None = None) -> list[dict]:
 def count_jobs(status: str | None = None) -> int:
     with db.connection() as conn:
         if status is None:
-            row = conn.execute("SELECT COUNT(*) AS n FROM jobs").fetchone()
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM jobs WHERE deleted_at IS NULL"
+            ).fetchone()
         else:
             row = conn.execute(
-                "SELECT COUNT(*) AS n FROM jobs WHERE status = ?", (status,)
+                "SELECT COUNT(*) AS n FROM jobs WHERE status = ? AND deleted_at IS NULL",
+                (status,),
             ).fetchone()
     return int(row["n"])
+
+
+def delete_job(job_id: str) -> bool:
+    """Hide a job from every read path without destroying its audit record.
+
+    The library is the only place that owns files. Result assets are moved to
+    trash by the calling module when the user asks for that; this function only
+    soft-deletes the job row so Jobs history and the chat thread stop showing it.
+    """
+    now = now_ms()
+    with db.connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM jobs WHERE id = ? AND deleted_at IS NULL", (job_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        conn.execute(
+            "UPDATE jobs SET deleted_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, job_id),
+        )
+    return True
 
 
 def update_job(job_id: str, patch: dict) -> dict | None:
@@ -157,7 +186,8 @@ def update_job(job_id: str, patch: dict) -> dict | None:
     assignments = ", ".join(f"{col} = :{col}" for col in fields)
     with db.connection() as conn:
         conn.execute(
-            f"UPDATE jobs SET {assignments}, updated_at = :updated WHERE id = :id",
+            f"UPDATE jobs SET {assignments}, updated_at = :updated "
+            "WHERE id = :id AND deleted_at IS NULL",
             {**fields, "updated": now_ms(), "id": job_id},
         )
     return get_job(job_id)

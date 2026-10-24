@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RefreshCw } from '@lucide/vue'
 import { formatTime } from '@/lib/format'
 import { useJobsStore } from '@/stores/jobs'
@@ -13,6 +13,14 @@ const ui = useUiStore()
 
 const selectedId = ref<string>('')
 const selected = computed(() => jobs.byId(selectedId.value))
+const refreshing = ref(false)
+
+async function refresh(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  await jobs.syncFromBackend()
+  refreshing.value = false
+}
 
 // Auto-select the newest job once history loads from the backend.
 watch(
@@ -22,6 +30,10 @@ watch(
   },
   { immediate: true },
 )
+
+onMounted(() => {
+  void refresh()
+})
 
 function snapshot(): string {
   if (!selected.value) return ''
@@ -48,11 +60,19 @@ function copySnapshot() {
 
 <template>
   <div class="mx-auto max-w-7xl px-6 py-6">
-    <header class="mb-5">
-      <h1 class="text-lg font-semibold">Jobs</h1>
-      <p class="mt-1 text-sm text-muted">
-        Every generation is an ordered pipeline run. Inspect stages, snapshot params, re-run from any point.
-      </p>
+    <header class="mb-5 flex flex-wrap items-start gap-3">
+      <div>
+        <h1 class="text-lg font-semibold">Jobs</h1>
+        <p class="mt-1 text-sm text-muted">
+          Every generation is an ordered pipeline run. Inspect stages, snapshot params, re-run from any point.
+        </p>
+      </div>
+      <div class="ml-auto">
+        <AppButton size="sm" variant="ghost" :disabled="refreshing" @click="refresh">
+          <RefreshCw class="h-3.5 w-3.5" :class="refreshing ? 'animate-spin' : ''" />
+          {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+        </AppButton>
+      </div>
     </header>
 
     <div class="flex flex-col gap-5 lg:flex-row">

@@ -22,7 +22,10 @@ function toggleTheme() {
 <template>
   <header class="relative z-30 flex h-14 shrink-0 items-center gap-2 whitespace-nowrap border-b border-border bg-surface/70 px-4 backdrop-blur">
     <h1 class="max-w-64 truncate text-sm font-semibold">{{ pageTitle }}</h1>
-    <span class="hidden rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted lg:inline">mock data</span>
+    <span
+      class="hidden rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-success lg:inline"
+      title="T2I_main runs on the real backend. Other generation tabs are mock."
+    >T2I live</span>
 
     <div class="flex-1" />
 

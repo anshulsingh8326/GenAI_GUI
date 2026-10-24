@@ -5,10 +5,10 @@ A local-first generative AI studio: **Vue 3 + TypeScript** frontend, **FastAPI**
 the backend serves the built GUI and owns all state (settings, jobs, assets). An optional
 **MCP server** exposes the same API to local AI agents.
 
-> **Status: mock phase.** The common layer is real (settings, connectors, library, jobs,
-> MCP skeleton). Generation execution is still simulated in the GUI with placeholder images
-> (the "MOCK DATA" badge) until the Text->Image pipeline lands - see `docs/PLAN.md` §8 for
-> the feature ladder.
+> **Status: T2I_main is live.** Text → Image runs through the real backend and ComfyUI:
+> validated pack ranges, persisted jobs, generated assets in the library, prompt
+> enhancement and result history. Other generation tabs are still mock until their
+> pipelines land - see `docs/PLAN.md` §8 for the feature ladder.
 
 ## Quick start
 
@@ -43,12 +43,17 @@ running in the background.
   are the next phase. The editable model/LoRA catalog (`data/model_catalog.json`,
   *Settings -> Model catalog*) tracks model links, strength ranges and trigger words and feeds
   the composer - see `docs/MODEL_CATALOG.md`.
-  (`docs/COMFYUI_CONTENT.md`).
+- **Text → Image (T2I_main)** - strict T2I through ComfyUI with Krea 2 Turbo: model-aware
+  ranges, LoRA chaining, latent refine or 4x-UltraSharp, prompt enhancement, batch generation
+  and visible upscale on/off. Settings persist across tabs/reloads; every panel has a reset.
+  History is a chat workspace with result cards, full applied settings, shared media viewer
+  and soft deletion (message-only or move images to trash).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
-  favorites, tags, search. Delete moves files to `data\trash` - **nothing is ever
-  hard-deleted**.
+  favorites, tags, search, refresh and a shared fullscreen viewer. Delete moves files to
+  `data\trash` - **nothing is ever hard-deleted**.
 - **Jobs** - every run gets a backend id (`#142`, ...) with persisted stages and progress; the
   top-bar queue pill shows **Working** while anything is running, `Queue idle` otherwise.
+  Terminal jobs can be removed from history without destroying their audit row.
 - **Folder browser** - folder fields have a real native "Browse..." dialog (the dialog
   opens on the machine running the backend).
 
@@ -108,6 +113,7 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/MODEL_CATALOG.md` | editable model/LoRA metadata: links, strength ranges, triggers, API |
 | `docs/PACKS.md` | ComfyUI workflow -> pack/recipe guide |
 | `docs/GUI_GUIDELINES.md` | frontend conventions for every new module |
+| `docs/GENMODULE_GUIDE.md` | reusable GenModule architecture, packs, jobs, library and media viewer |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
 | `tools/README.md` | the fully self-contained (uv.exe) option |

@@ -137,6 +137,7 @@ Mounted by `app/api/__init__.py`; implementation in
 | GET | `/api/t2i/jobs` | recent T2I jobs (`?limit=`) |
 | GET | `/api/t2i/jobs/{job_id}` | one job with stages, params, result ids |
 | POST | `/api/t2i/jobs/{job_id}/cancel` | best-effort cancel; finished jobs are a no-op |
+| DELETE | `/api/t2i/jobs/{job_id}?deleteAssets=true\|false` | soft-delete a terminal job; optionally move its results to trash |
 
 Job ids contain `#`, so REST clients must URL-encode them (`%23`). The module
 reuses the shared job records and the shared asset library; it never bypasses

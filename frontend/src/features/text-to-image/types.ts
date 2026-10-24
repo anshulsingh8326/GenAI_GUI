@@ -591,6 +591,15 @@ export interface T2IJobRecord {
   error?: string
 }
 
+export interface T2IJobDeleteResult {
+  id: string
+  deleted: boolean
+  /** Asset ids that were moved to data/trash. */
+  assetsTrashed: string[]
+  /** Result ids that were already missing (for example, deleted from the Library). */
+  assetsMissing: string[]
+}
+
 export interface T2IPackInfo {
   ok: boolean
   version: number
