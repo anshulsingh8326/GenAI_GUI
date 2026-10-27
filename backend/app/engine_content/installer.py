@@ -5,7 +5,8 @@ shipped `requirements.json` declares (core or a GenModule). The GUI can name a
 module + node; it can never hand the server an arbitrary repository.
 
 Safety (docs/COMFYUI_CONTENT.md §4):
-- pinned commits only; updates are refused when the checkout has local changes;
+- full 40-character pinned commits only; unpinned git entries are refused;
+  updates are also refused when the checkout has local changes;
 - the folder is staged first and moved into `custom_nodes/` on success, so a
   failed download never leaves a half-written node behind;
 - nothing is deleted from the user's install; a failed pip step leaves the node
@@ -38,6 +39,7 @@ MAX_TASKS = 20
 # A single git/pip step should never hang the install forever (network stalls,
 # credential prompts, a proxy that never answers).
 COMMAND_TIMEOUT = 900
+COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class InstallBusy(Exception):
@@ -122,6 +124,13 @@ def _validate_repo(repo: str) -> None:
         raise InstallError("Only http(s) repositories are supported.")
 
 
+def _validate_commit(commit: str) -> None:
+    if not COMMIT_RE.fullmatch(commit):
+        raise InstallError(
+            "requirements.json needs a full 40-character pinned commit (hex SHA) for git installs."
+        )
+
+
 def _python_or_none(report: dict) -> str | None:
     python = report.get("pythonPath")
     return str(python) if python else None
@@ -143,7 +152,7 @@ def _plan(module_id: str, node_name: str) -> dict:
         raise InstallError("requirements.json node entry has no name.")
     target = nodes_dir / _safe_name(name)
     repo = str(item.get("repo") or "").strip()
-    commit = str(item.get("commit") or "").strip()
+    commit = str(item.get("commit") or "").strip().lower()
     package = str(item.get("package") or "").strip()
     pip_spec = str(item.get("pip") or "").strip()
     python = _python_or_none(report)
@@ -151,8 +160,6 @@ def _plan(module_id: str, node_name: str) -> dict:
     if target.exists():
         if repo and (target / ".git").is_dir():
             action = "update"
-            if not commit:
-                raise InstallError("requirements.json has no pinned commit - refusing to update an unpinned checkout.")
         else:
             raise InstallError(
                 "That folder already exists but is not a git checkout. "
@@ -180,6 +187,12 @@ def _plan(module_id: str, node_name: str) -> dict:
 
     if not repo and action != "pip":
         raise InstallError("requirements.json has no repository for this node.")
+    if action in {"clone", "update"}:
+        if not commit:
+            raise InstallError(
+                "requirements.json has no pinned commit - refusing to install or update an unpinned checkout."
+            )
+        _validate_commit(commit)
 
     return {
         "moduleId": module_id,

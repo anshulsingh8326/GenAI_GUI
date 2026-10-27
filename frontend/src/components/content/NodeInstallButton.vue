@@ -23,6 +23,11 @@ const task = computed<ComfyInstallTask | null>(() =>
 )
 const busy = computed(() => task.value?.status === 'running')
 
+/* Git installs must pin a full SHA; package installs (pip) are exempt. */
+const unpinned = computed(
+  () => Boolean(props.node.repo) && !props.node.package && !props.node.commit,
+)
+
 /* Loose prefix compare - manifests store full SHAs, installs report 12 chars. */
 function commitMatches(wanted: string, installed: string | null): boolean {
   if (!wanted || !installed) return true
@@ -52,6 +57,9 @@ const verb = computed(() => {
 const confirmTitle = computed(() => `${verb.value} ${props.node.name}`)
 
 const actionDetail = computed(() => {
+  if (unpinned.value) {
+    return 'This entry has no pinned commit. Add a full 40-character SHA to requirements.json before installing.'
+  }
   if (props.node.package) {
     return `Install the Python package ${props.node.pip || props.node.package} into this ComfyUI's Python environment.`
   }
@@ -147,7 +155,9 @@ watch(
             <span class="text-muted">Pinned commit </span>
             <code class="font-mono text-[11px]">{{ node.commit.slice(0, 12) }}</code>
           </p>
-          <p v-else-if="!node.package" class="text-warn">No pinned commit - the default branch will be used.</p>
+          <p v-else-if="!node.package" class="text-warn">
+            No pinned commit - installs are disabled. Add a full 40-character SHA to requirements.json.
+          </p>
           <p v-if="node.package">
             <span class="text-muted">Package </span>
             <code class="font-mono text-[11px]">{{ node.pip || node.package }}</code>
@@ -160,7 +170,11 @@ watch(
       </div>
       <template #footer>
         <AppButton variant="ghost" @click="confirmOpen = false">Cancel</AppButton>
-        <AppButton variant="primary" :disabled="content.starting || content.installing" @click="runInstall">
+        <AppButton
+          variant="primary"
+          :disabled="content.starting || content.installing || unpinned"
+          @click="runInstall"
+        >
           {{ content.starting ? 'Starting...' : verb }}
         </AppButton>
       </template>

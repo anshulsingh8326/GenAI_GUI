@@ -84,8 +84,11 @@ next to its `manifest.json`. Only modules that need engine content have one.
 Field rules:
 
 - `nodes[].name` - display name; matching is by folder name (case-insensitive) **or** by
-  normalized git origin (`repo`), whichever hits first. `commit` is the SHA to pin installs
-  to (Phase B); it also lets the audit report "installed but outdated".
+  normalized git origin (`repo`), whichever hits first.
+- `nodes[].commit` - **required for every git entry**: a full 40-character commit SHA
+  (hex; normalized to lowercase). It pins clone/update and lets the audit report
+  "installed but outdated". Short SHAs, tags, branches, and missing commits are rejected;
+  package entries (`package` + `pip`) are exempt.
 - `nodes[].package` - optional Python module name for package-style installs. When no
   custom_nodes folder / git origin matches, the audit looks for `<module>/__init__.py` or a
   `<module>-*.dist-info` in the detected site-packages (portable + venv layouts). ComfyUI
@@ -105,6 +108,10 @@ Field rules:
 schema and is audited once per install, independently of modules. It exists for content
 that *every* module effectively needs - everything workflow-specific belongs in that
 module's manifest instead.
+
+Do **not** repeat a core entry in a module manifest. It is already audited once, and a
+second copy can pin a different commit and cause an accidental downgrade. If a module uses
+the shared GGUF loader, rely on the core entry. Declare only module-specific content here.
 
 Current baseline:
 

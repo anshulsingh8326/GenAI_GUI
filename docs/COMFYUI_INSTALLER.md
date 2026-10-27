@@ -11,15 +11,19 @@ that a shipped manifest already contains; it can never send an arbitrary reposit
 
 | Manifest shape | Action | Notes |
 | --- | --- | --- |
-| `repo` + pinned `commit`, folder missing | **clone** | `git clone` into staging, `checkout <commit>`, then move into `custom_nodes/`. |
+| `repo` + full 40-char pinned `commit`, folder missing | **clone** | `git clone` into staging, `checkout <commit>`, then move into `custom_nodes/`. |
 | same, but Git is not installed | **zip fallback** | GitHub codeload archive at the pinned commit. Refused for non-GitHub repos or missing commits. |
-| folder exists, has `.git`, `repo` + `commit` | **update** | Refused when `git status --porcelain` is dirty. |
+| folder exists, has `.git`, `repo` + full 40-char `commit` | **update** | Refused when `git status --porcelain` is dirty. |
+| `repo` without a full 40-char `commit` | **refused** | Git entries are never installed from the default branch. |
 | folder exists without `.git` | **refused** | Never overwritten; the user must rename/remove it manually. |
 | `package` + `pip`, folder missing | **pip** | Runs the detected ComfyUI Python: `<python> -m pip install ...`. |
 | package already importable / folder installed | no button | The audit marks it installed; nothing runs. |
 
 - `moduleId = "core"` resolves the shared `backend/app/engine_content/core_requirements.json`.
   Any other id resolves `backend/app/GenModules/<id>/requirements.json`.
+- Every git entry must use a **full 40-character commit SHA**. A missing, short, tag-like, or
+  malformed commit fails planning with HTTP 400; there is no unpinned/default-branch fallback.
+  Package entries (`package` + `pip`) do not need a commit.
 - Node names are sanitized before becoming folder names. Only `http(s)` repository URLs are
   accepted; the GUI cannot supply paths.
 - Package-style installs use the `pip` field (for example `comfyui-manager>=4.2,<5`). For
