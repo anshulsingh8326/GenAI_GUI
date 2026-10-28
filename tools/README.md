@@ -51,3 +51,14 @@ changes). Setup can download portable Node.js into `tools\node`; once
 The whole folder can be copied to another PC; run `Launch.bat` once there
 (it detects a moved/broken `.venv`, repairs it and rebuilds the frontend as
 needed). Your `data\` folder travels with it.
+
+## Building for other users
+
+`frontend\dist` is gitignored, so a normal git commit carries the Vue source,
+not the built UI. On the next launch, Setup sees that the sources changed and
+offers to rebuild with system npm or portable Node.js.
+
+To publish a release that needs no Node on the user's PC, run `Launch.bat` (or
+`cd frontend && npm run build`) before packaging the ZIP/installer and include
+`frontend\dist` in it. GitHub source users will still build automatically with
+portable Node if they do not have it.

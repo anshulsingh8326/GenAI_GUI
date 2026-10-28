@@ -224,18 +224,8 @@ if exist "tools\node\npm.cmd" set "PATH=%CD%\tools\node;!PATH!"
 where npm >nul 2>nul
 if !errorlevel! NEQ 0 (
   echo.
-  if exist "frontend\dist\index.html" (
-    echo [warn] Node.js/npm was not found. The existing frontend build will be used.
-    echo        Download: https://nodejs.org/en/download
-    echo        Install Node.js and run Setup.bat to rebuild after Vue source changes.
-    if not defined FROM_LAUNCH (
-      choice /C YN /M "Open the Node.js download page now"
-      if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
-    )
-    exit /b 0
-  )
   echo [missing] Node.js/npm was not found.
-  echo           Node.js is required for the first frontend build.
+  echo           Node.js is required to build or rebuild the frontend.
   echo           Portable option: download Node.js into tools\node - no installer.
   echo           Download: https://nodejs.org/en/download
   choice /C YN /M "Download portable Node.js into tools\node now"
@@ -249,32 +239,32 @@ if !errorlevel! NEQ 0 (
     echo [warn] Portable Node.js is not ready; checking winget next.
   )
   where winget >nul 2>nul
-  if !errorlevel! NEQ 0 (
-    echo.
-    echo           winget is not available on this PC.
-    choice /C YN /M "Open the Node.js download page now"
-    if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
-    echo [error] Install Node.js and run Setup.bat again.
-    exit /b 1
-  )
-  choice /C YN /M "Install Node.js LTS with winget now"
-  if !errorlevel! EQU 1 (
-    call :winget_install OpenJS.NodeJS.LTS
-    if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;!PATH!"
-    where npm >nul 2>nul
-    if !errorlevel! NEQ 0 (
+  if !errorlevel! EQU 0 (
+    choice /C YN /M "Install Node.js LTS with winget now"
+    if !errorlevel! EQU 1 (
+      call :winget_install OpenJS.NodeJS.LTS
+      if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;!PATH!"
+      where npm >nul 2>nul
+      if !errorlevel! EQU 0 goto :frontend_ready
       echo [warn] Node.js was installed but npm is not visible in this window yet.
-      echo        Restart Setup/Launch and run Setup.bat again.
-      exit /b 1
     )
-  ) else (
-    echo.
-    echo [warn] Node.js is required to build the frontend.
-    echo        https://nodejs.org/en/download
-    choice /C YN /M "Open the Node.js download page now"
-    if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
-    exit /b 1
   )
+  if exist "frontend\dist\index.html" (
+    echo [warn] Using the existing frontend\dist. Install Node.js and run Setup.bat
+    echo        again to rebuild after Vue source changes.
+    echo        Download: https://nodejs.org/en/download
+    if not defined FROM_LAUNCH (
+      choice /C YN /M "Open the Node.js download page now"
+      if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
+    )
+    exit /b 0
+  )
+  echo.
+  echo [error] Node.js is required to build the frontend.
+  echo         Download: https://nodejs.org/en/download
+  choice /C YN /M "Open the Node.js download page now"
+  if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
+  exit /b 1
 )
 :frontend_ready
 pushd frontend

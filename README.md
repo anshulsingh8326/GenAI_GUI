@@ -27,6 +27,62 @@ the backend serves the built GUI and owns all state (settings, jobs, assets). An
 To stop the app: press `Ctrl+C` in that window - or just close it. Nothing keeps
 running in the background.
 
+## First-time setup for new users
+
+The app is the GUI; it does **not** include ComfyUI or any model files.
+
+**What you need**
+
+- Windows 10/11 64-bit. The one-click `Launch.bat` flow is Windows-only for now.
+- Internet access for the first setup.
+- [ComfyUI](https://www.comfy.org/download) - the portable release is easiest.
+  Download and unzip it anywhere with enough disk space.
+- Model files are **not** downloaded by this app. You can add them later; image
+  generation will not work until the model files a workflow needs are present.
+
+**Steps**
+
+1. Download or clone this project into a normal writable folder. Do not put it
+   inside `Program Files`; the app creates `data\`, `tools\` and
+   `backend\.venv\` next to it.
+2. Double-click **`Launch.bat`**.
+   - If Setup asks to download **portable uv**, choose **Y**. It installs Python
+     inside `tools\python`; nothing is added to Windows `PATH`.
+   - If the UI needs building and npm is missing, Setup offers **portable
+     Node.js** in `tools\node`. Choose **Y** if you want Setup to build it.
+   - If Setup says **Git is missing**, install it from
+     <https://git-scm.com/download/win>, then run `Launch.bat` again. Git is
+     required for ComfyUI custom-node installs; the app can still open without
+     it, but node install buttons stay disabled.
+3. Wait for the browser to open at <http://127.0.0.1:8766>. The first setup can
+   take a few minutes.
+4. In the **ComfyUI setup** popup, choose the ComfyUI **source** folder - the one
+   that contains `main.py`, `custom_nodes\` and `models\`. For the portable
+   release this is usually:
+   `...\ComfyUI_windows_portable\ComfyUI`
+   not the outer `ComfyUI_windows_portable` folder. **Browse...** opens a folder
+   picker; if the app detects a folder it also offers **Use this folder**. If
+   you do not have ComfyUI yet, use the download link shown in the popup.
+5. Check the list of **required custom nodes**. Installing is always an explicit
+   action: click **Install**, confirm, and wait for the log. Git-based installs
+   are pinned to a commit. When finished, click **Restart ComfyUI** if the log
+   offers it; otherwise close and reopen your ComfyUI window.
+6. Start ComfyUI if it is not already running. You can point
+   *Settings -> Connections* at your ComfyUI start `.bat` and use **Launch
+   ComfyUI** there.
+7. Add model files. **Settings -> Engine content** shows the files each module
+   expects; this app does not download models yet. Optional nodes and models
+   live there too.
+8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
+   prompt enhancement.
+
+Later launches are automatic. Node.js is only needed to rebuild the UI after
+Vue source/config changes; once `frontend\dist` exists, running the app does not
+need Node. A normal git commit carries frontend source, not the gitignored
+`frontend\dist` - source users rebuild with system npm or portable Node. For a
+release that needs no Node, build the frontend first and include
+`frontend\dist` in the release ZIP (see `tools\README.md`).
+
 ## What you can do today
 
 - **Settings** - saved in `data\settings.json` (authoritative), every field has a reset

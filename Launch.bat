@@ -39,15 +39,7 @@ if not exist "%PY%" (
 if not exist "frontend\dist\index.html" set "SETUP_NEEDED=1"
 if not defined SETUP_NEEDED (
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\needs-frontend-build.ps1"
-  if !errorlevel! EQU 0 (
-    where npm >nul 2>nul
-    if !errorlevel! EQU 0 (
-      set "SETUP_NEEDED=1"
-    ) else (
-      echo [warn] Vue sources are newer than frontend\dist, but Node.js/npm was not found.
-      echo        Using the existing build. Install Node.js and run Setup.bat to rebuild.
-    )
-  )
+  if !errorlevel! EQU 0 set "SETUP_NEEDED=1"
 )
 
 if defined SETUP_NEEDED (
