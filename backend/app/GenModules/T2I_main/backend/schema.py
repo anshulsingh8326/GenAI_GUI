@@ -59,6 +59,9 @@ class EnhanceOptions(BaseModel):
     model: str | None = None
     systemPrompt: str | None = None
     fallbackToOriginal: bool = False
+    # Free the Ollama text model after the rewrite and before ComfyUI starts
+    # the image job. Default-on: the GUI exposes a visible opt-out.
+    unloadAfter: bool = True
 
 
 class T2IJobRequest(BaseModel):
@@ -92,3 +95,6 @@ class T2IEnhanceRequest(BaseModel):
     systemPrompt: str | None = None
     maxLength: int | None = None
     temperature: float | None = None
+    # Release the text model after the rewrite by default; the GUI exposes a
+    # visible opt-out.
+    unloadAfter: bool = True

@@ -1,13 +1,18 @@
-"""T2I_main pack loader + catalog merge.
+"""T2I_main pack registry + catalog merge.
 
-The tracked pack under ``backend/pack`` is authoritative for this module:
+The module owns one or more tracked packs under ``backend/pack``. The registry
+(``registry.json``) lists them; each pack directory is authoritative for:
 
-- per-model bindings and ranges (models.json)
+- per-model bindings, workflow, composer and ranges (models.json)
 - per-LoRA ranges / triggers / exclusions (loras.json)
 - upscale paths (upscalers.json)
 - prompt-enhancement models (text_models.json)
 - recipe defaults, ratios, sizes, sampler lists (options.json)
-- the ComfyUI API workflow (workflows/krea2_t2i.api.json)
+- the ComfyUI API workflow(s) under its own ``workflows/`` directory
+
+A model always resolves through its pack. Separate families keep separate
+workflows; a model may override its pack's default workflow/composer when its
+loader or graph really differs. No model is added to another family's graph.
 
 The user-owned ``data/model_catalog.json`` (app.engine_content.catalog) is used
 only for installed-file presence and user-edited trigger words. It never
@@ -25,6 +30,7 @@ from typing import Any
 from app.engine_content import catalog as user_catalog
 
 PACK_DIR = Path(__file__).resolve().parent / "pack"
+REGISTRY_FILE = PACK_DIR / "registry.json"
 
 MODEL_RANGE_KEYS = ("steps", "cfg", "denoise", "width", "height", "batch", "seed")
 REFINE_RANGE_KEYS = ("steps", "cfg", "denoise", "scale")
@@ -34,16 +40,27 @@ class PackError(Exception):
     """The tracked T2I pack is missing or invalid."""
 
 
-def _read_json(name: str) -> dict:
-    path = PACK_DIR / name
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(PACK_DIR.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path)
+
+
+def _read_json(base: Path, name: str) -> dict:
+    path = (base / name).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError as exc:
+        raise PackError(f"T2I pack: `{name}` escapes its pack directory.") from exc
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise PackError(f"Missing T2I pack file: {path}") from exc
+        raise PackError(f"Missing T2I pack file: {_display_path(path)}") from exc
     except ValueError as exc:
-        raise PackError(f"T2I pack file is not valid JSON: {name}: {exc}") from exc
+        raise PackError(f"T2I pack file is not valid JSON: {_display_path(path)}: {exc}") from exc
     if not isinstance(raw, dict):
-        raise PackError(f"T2I pack file must contain a JSON object: {name}")
+        raise PackError(f"T2I pack file must contain a JSON object: {_display_path(path)}")
     return raw
 
 
@@ -119,13 +136,11 @@ def clean_range(raw: Any, field: str) -> dict:
     }
 
 
-def _clean_model(raw: Any, options: dict) -> dict:
+def _clean_model(raw: Any, options: dict, pack: dict) -> dict:
     if not isinstance(raw, dict):
         raise PackError("T2I pack: every models[] item must be an object.")
     model_id = _text(raw.get("id"), "models[].id")
     loader = _text(raw.get("loader"), f"models.{model_id}.loader")
-    if loader not in {"UNETLoader", "UnetLoaderGGUF"}:
-        raise PackError(f"T2I pack: unsupported model loader `{loader}` for {model_id}.")
     ranges_raw = raw.get("ranges")
     if not isinstance(ranges_raw, dict):
         raise PackError(f"T2I pack: `models.{model_id}.ranges` is required.")
@@ -157,6 +172,8 @@ def _clean_model(raw: Any, options: dict) -> dict:
             f"T2I pack: model {model_id} default scheduler `{defaults['scheduler']}` is not in options.schedulers."
         )
 
+    default_workflow = options["recipe"]["workflow"]
+    default_composer = options["recipe"]["composer"]
     return {
         "id": model_id,
         "catalogId": str(raw.get("catalogId") or ""),
@@ -165,6 +182,8 @@ def _clean_model(raw: Any, options: dict) -> dict:
         "family": str(raw.get("family") or ""),
         "base": _text(raw.get("base"), f"models.{model_id}.base"),
         "description": str(raw.get("description") or ""),
+        "packId": pack["id"],
+        "packLabel": pack["label"],
         "loader": loader,
         "file": _text(raw.get("file"), f"models.{model_id}.file"),
         "target": _text(raw.get("target"), f"models.{model_id}.target"),
@@ -174,6 +193,18 @@ def _clean_model(raw: Any, options: dict) -> dict:
         "clipType": _text(raw.get("clipType"), f"models.{model_id}.clipType"),
         "vae": _text(raw.get("vae"), f"models.{model_id}.vae"),
         "vaeTarget": str(raw.get("vaeTarget") or "vae"),
+        "workflow": _text(
+            raw.get("workflow"),
+            f"models.{model_id}.workflow",
+            required=False,
+            default=default_workflow,
+        ),
+        "composer": _text(
+            raw.get("composer"),
+            f"models.{model_id}.composer",
+            required=False,
+            default=default_composer,
+        ),
         "vram": str(raw.get("vram") or ""),
         "capabilities": [str(item) for item in (raw.get("capabilities") or [])],
         "verified": _bool(raw.get("verified"), False),
@@ -265,22 +296,18 @@ def _clean_text_model(raw: Any) -> dict:
     }
 
 
-def _validate_workflow(workflow: Any) -> dict:
+def _validate_workflow(workflow: Any, path: str) -> dict:
     if not isinstance(workflow, dict) or not workflow:
-        raise PackError("T2I pack: the workflow must be a non-empty API-format object.")
-    required = {"1", "2", "3", "4", "5", "6", "7", "11"}
-    missing = sorted(required - set(workflow))
-    if missing:
-        raise PackError(f"T2I pack: workflow is missing required node ids: {', '.join(missing)}")
+        raise PackError(f"T2I pack: workflow `{path}` must be a non-empty API-format object.")
     for node_id, node in workflow.items():
         if not isinstance(node, dict) or not isinstance(node.get("class_type"), str):
-            raise PackError(f"T2I pack: workflow node {node_id} has no class_type.")
+            raise PackError(f"T2I pack: workflow `{path}` node {node_id} has no class_type.")
         if not isinstance(node.get("inputs"), dict):
-            raise PackError(f"T2I pack: workflow node {node_id} has no inputs object.")
+            raise PackError(f"T2I pack: workflow `{path}` node {node_id} has no inputs object.")
         class_type = node["class_type"]
         if "IAMCCS" in class_type or "Switch" in class_type:
             raise PackError(
-                f"T2I pack: workflow node {node_id} uses `{class_type}`. "
+                f"T2I pack: workflow `{path}` node {node_id} uses `{class_type}`. "
                 "T2I_main forbids switch nodes; prune the graph instead."
             )
     return workflow
@@ -336,6 +363,7 @@ def _clean_options(raw: dict) -> dict:
             "id": _text(recipe.get("id"), "options.recipe.id"),
             "label": _text(recipe.get("label"), "options.recipe.label"),
             "workflow": _text(recipe.get("workflow"), "options.recipe.workflow"),
+            "composer": _text(recipe.get("composer"), "options.recipe.composer", required=False, default="krea2"),
             "engine": str(recipe.get("engine") or "comfyui"),
             "description": str(recipe.get("description") or ""),
         },
@@ -383,64 +411,132 @@ def _clean_options(raw: dict) -> dict:
     }
 
 
-def load_pack() -> dict:
-    """Load and validate the complete tracked T2I pack."""
-    options = _clean_options(_read_json("options.json"))
-    models_raw = _read_json("models.json")
-    loras_raw = _read_json("loras.json")
-    upscalers_raw = _read_json("upscalers.json")
-    text_raw = _read_json("text_models.json")
+def _load_registry() -> list[dict]:
+    """Read the pack registry, with a legacy single-pack fallback."""
+    if not REGISTRY_FILE.is_file():
+        return [{"id": "default", "label": "Default", "path": ".", "default": True}]
+
+    raw = _read_json(PACK_DIR, "registry.json")
+    entries = raw.get("packs")
+    if not isinstance(entries, list) or not entries:
+        raise PackError("T2I pack registry: `packs` must be a non-empty array.")
+
+    default_id = str(raw.get("defaultPack") or "").strip()
+    packs: list[dict] = []
+    seen: set[str] = set()
+    for item in entries:
+        if not isinstance(item, dict):
+            raise PackError("T2I pack registry: every packs[] item must be an object.")
+        pack_id = _text(item.get("id"), "registry.packs[].id")
+        if pack_id in seen:
+            raise PackError(f"T2I pack registry: duplicate pack id `{pack_id}`.")
+        seen.add(pack_id)
+        path = str(item.get("path") or ".").strip().replace("\\", "/")
+        if not path:
+            raise PackError(f"T2I pack registry: pack `{pack_id}` has an empty path.")
+        packs.append(
+            {
+                "id": pack_id,
+                "label": str(item.get("label") or pack_id),
+                "path": path,
+                "default": pack_id == default_id,
+            }
+        )
+
+    if default_id and default_id not in seen:
+        raise PackError(f"T2I pack registry: defaultPack `{default_id}` is not a registered pack.")
+    if not any(pack["default"] for pack in packs):
+        packs[0]["default"] = True
+    return packs
+
+
+def _pack_root(entry: dict) -> Path:
+    root = (PACK_DIR / str(entry["path"])).resolve()
+    try:
+        root.relative_to(PACK_DIR.resolve())
+    except ValueError as exc:
+        raise PackError(f"T2I pack registry: pack `{entry['id']}` path escapes `backend/pack`.") from exc
+    if not root.is_dir():
+        raise PackError(f"T2I pack registry: pack `{entry['id']}` directory is missing: {entry['path']}")
+    return root
+
+
+def _load_pack_entry(entry: dict) -> dict:
+    """Load one pack directory and validate its internal references."""
+    root = _pack_root(entry)
+    pack = {"id": entry["id"], "label": entry["label"], "path": entry["path"]}
+    options = _clean_options(_read_json(root, "options.json"))
+    models_raw = _read_json(root, "models.json")
+    loras_raw = _read_json(root, "loras.json")
+    upscalers_raw = _read_json(root, "upscalers.json")
+    text_raw = _read_json(root, "text_models.json")
 
     models: dict[str, dict] = {}
     for item in models_raw.get("models") or []:
-        model = _clean_model(item, options)
+        model = _clean_model(item, options, pack)
         if model["id"] in models:
-            raise PackError(f"T2I pack: duplicate model id `{model['id']}`.")
+            raise PackError(f"T2I pack `{pack['id']}`: duplicate model id `{model['id']}`.")
         models[model["id"]] = model
 
     loras: dict[str, dict] = {}
     for item in loras_raw.get("loras") or []:
         lora = _clean_lora(item)
         if lora["id"] in loras:
-            raise PackError(f"T2I pack: duplicate LoRA id `{lora['id']}`.")
+            raise PackError(f"T2I pack `{pack['id']}`: duplicate LoRA id `{lora['id']}`.")
         loras[lora["id"]] = lora
 
     upscalers: dict[str, dict] = {}
     for item in upscalers_raw.get("upscalers") or []:
         upscaler = _clean_upscaler(item)
         if upscaler["id"] in upscalers:
-            raise PackError(f"T2I pack: duplicate upscaler id `{upscaler['id']}`.")
+            raise PackError(f"T2I pack `{pack['id']}`: duplicate upscaler id `{upscaler['id']}`.")
         upscalers[upscaler["id"]] = upscaler
 
     comfy_text_models: dict[str, dict] = {}
     for item in text_raw.get("comfyui") or []:
         text_model = _clean_text_model(item)
         if text_model["id"] in comfy_text_models:
-            raise PackError(f"T2I pack: duplicate ComfyUI text model id `{text_model['id']}`.")
+            raise PackError(
+                f"T2I pack `{pack['id']}`: duplicate ComfyUI text model id `{text_model['id']}`."
+            )
         comfy_text_models[text_model["id"]] = text_model
 
     ollama_raw = text_raw.get("ollama") or {}
     if not isinstance(ollama_raw, dict):
-        raise PackError("T2I pack: text_models.ollama must be an object.")
+        raise PackError(f"T2I pack `{pack['id']}`: text_models.ollama must be an object.")
     ollama_text = {
         "autoDiscover": _bool(ollama_raw.get("autoDiscover"), True),
         "preferred": [str(item).strip() for item in (ollama_raw.get("preferred") or []) if str(item).strip()],
         "notes": str(ollama_raw.get("notes") or ""),
     }
 
-    workflow = _validate_workflow(_read_json("workflows/krea2_t2i.api.json"))
+    workflow_paths = {str(model["workflow"]) for model in models.values()}
+    workflow_paths.add(str(options["recipe"]["workflow"]))
+    workflows = {
+        path: _validate_workflow(_read_json(root, path), path)
+        for path in sorted(workflow_paths)
+    }
+    default_workflow = workflows[str(options["recipe"]["workflow"])]
+
     defaults = options["defaults"]
     if defaults.get("modelId") not in models:
-        raise PackError(f"T2I pack: options.defaults.modelId `{defaults.get('modelId')}` is not a model.")
+        raise PackError(
+            f"T2I pack `{pack['id']}`: options.defaults.modelId "
+            f"`{defaults.get('modelId')}` is not a model."
+        )
     upscaler_default = defaults.get("upscaler") or {}
     if upscaler_default.get("id") not in upscalers:
-        raise PackError("T2I pack: options.defaults.upscaler.id is not a known upscaler.")
+        raise PackError(f"T2I pack `{pack['id']}`: options.defaults.upscaler.id is not a known upscaler.")
     for ref in defaults.get("loraChain") or []:
         if not isinstance(ref, dict) or ref.get("id") not in loras:
-            raise PackError(f"T2I pack: default LoRA chain references unknown id `{ref}`.")
+            raise PackError(
+                f"T2I pack `{pack['id']}`: default LoRA chain references unknown id `{ref}`."
+            )
 
     return {
+        **pack,
         "version": int(options["version"]),
+        "default": bool(entry.get("default")),
         "options": options,
         "recipe": options["recipe"],
         "models": models,
@@ -448,8 +544,49 @@ def load_pack() -> dict:
         "upscalers": upscalers,
         "comfyTextModels": comfy_text_models,
         "ollamaText": ollama_text,
-        "workflow": workflow,
+        "workflow": default_workflow,
+        "workflows": workflows,
     }
+
+
+def load_packs() -> dict[str, dict]:
+    """Load every registered pack. Model ids are global inside the module."""
+    packs: dict[str, dict] = {}
+    seen_models: set[str] = set()
+    for entry in _load_registry():
+        pack = _load_pack_entry(entry)
+        if pack["id"] in packs:
+            raise PackError(f"T2I pack registry: duplicate pack id `{pack['id']}`.")
+        overlap = seen_models.intersection(pack["models"])
+        if overlap:
+            raise PackError(
+                f"T2I pack registry: model id(s) `{', '.join(sorted(overlap))}` are declared by more than one pack."
+            )
+        seen_models.update(pack["models"])
+        packs[pack["id"]] = pack
+    return packs
+
+
+def load_pack(pack_id: str | None = None) -> dict:
+    """Load one pack by id, or the registry's default pack."""
+    packs = load_packs()
+    if pack_id:
+        pack = packs.get(pack_id)
+        if pack is None:
+            raise PackError(f"T2I pack registry: unknown pack `{pack_id}`.")
+        return pack
+    return next((pack for pack in packs.values() if pack.get("default")), next(iter(packs.values())))
+
+
+def pack_for_model(model_id: str | None) -> dict | None:
+    """Resolve the pack that owns a model id, or None for an unknown model."""
+    wanted = str(model_id or "").strip()
+    if not wanted:
+        return None
+    for pack in load_packs().values():
+        if wanted in pack["models"]:
+            return pack
+    return None
 
 
 # -- user catalog merge ---------------------------------------------------------
@@ -709,12 +846,15 @@ def build_snapshot(
                 }
             )
 
+    workflow_path = selected_model["workflow"] if selected_model else pack["recipe"]["workflow"]
+    workflow_graph = (pack.get("workflows") or {}).get(workflow_path, pack["workflow"])
     return {
         "ok": True,
+        "pack": {"id": pack.get("id"), "label": pack.get("label")},
         "recipe": pack["recipe"],
         "workflow": {
-            "path": pack["recipe"]["workflow"],
-            "nodeCount": len(pack["workflow"]),
+            "path": workflow_path,
+            "nodeCount": len(workflow_graph),
             "format": "comfyui-api",
         },
         "models": models,

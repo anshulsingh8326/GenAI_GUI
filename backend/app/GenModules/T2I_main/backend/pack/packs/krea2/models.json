@@ -5,11 +5,11 @@
     {
       "id": "krea2-turbo-int8",
       "catalogId": "model-snofssexnudesandother-krea2turbov14-int8",
-      "label": "Krea 2 Turbo (int8)",
-      "shortLabel": "Krea 2 int8",
+      "label": "SNOFS-Krea2_Q8",
+      "shortLabel": "SNOFS-Krea2_Q8",
       "family": "Krea 2",
       "base": "krea2",
-      "description": "Primary Krea 2 Turbo int8 diffusion model. Fast, LoRA-friendly and the reference Freeze v8 path.",
+      "description": "SNOFS Krea 2 Turbo V14 int8 (8-bit) diffusion model. Fast, LoRA-friendly and the reference Freeze v8 path.",
       "loader": "UNETLoader",
       "file": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
       "target": "unet",
@@ -77,12 +77,12 @@
           "max": 1536,
           "default": 1024,
           "step": 64,
-          "recommendedMin": 768,
-          "recommendedMax": 1280,
+          "recommendedMin": 640,
+          "recommendedMax": 1536,
           "hardMin": 256,
           "hardMax": 4096,
           "unit": "px",
-          "description": "Krea 2 safe width. Keep both sides at or below ~1536 on 12 GB VRAM."
+          "description": "Krea 2 working width. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
         },
         "height": {
           "label": "Height",
@@ -90,12 +90,12 @@
           "max": 1536,
           "default": 1024,
           "step": 64,
-          "recommendedMin": 768,
-          "recommendedMax": 1280,
+          "recommendedMin": 640,
+          "recommendedMax": 1536,
           "hardMin": 256,
           "hardMax": 4096,
           "unit": "px",
-          "description": "Krea 2 safe height. Keep both sides at or below ~1536 on 12 GB VRAM."
+          "description": "Krea 2 working height. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
         },
         "batch": {
           "label": "Batch",
@@ -182,11 +182,11 @@
     {
       "id": "krea2-turbo-q5",
       "catalogId": "model-krea2-turbo-q5-k-m",
-      "label": "Krea 2 Turbo GGUF (Q5_K_M)",
-      "shortLabel": "Krea 2 Q5",
+      "label": "Krea2_Q5",
+      "shortLabel": "Krea2_Q5",
       "family": "Krea 2",
       "base": "krea2",
-      "description": "GGUF Q5_K_M build of Krea 2 Turbo. Lower VRAM than int8, loaded with ComfyUI-GGUF.",
+      "description": "Krea 2 Turbo GGUF Q5_K_M build. Lower VRAM than the SNOFS int8 model, loaded with ComfyUI-GGUF.",
       "loader": "UnetLoaderGGUF",
       "file": "krea2_turbo-Q5_K_M.gguf",
       "target": "unet",
@@ -254,12 +254,12 @@
           "max": 1536,
           "default": 1024,
           "step": 64,
-          "recommendedMin": 768,
-          "recommendedMax": 1280,
+          "recommendedMin": 640,
+          "recommendedMax": 1536,
           "hardMin": 256,
           "hardMax": 4096,
           "unit": "px",
-          "description": "Krea 2 safe width. Keep both sides at or below ~1536 on 12 GB VRAM."
+          "description": "Krea 2 working width. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
         },
         "height": {
           "label": "Height",
@@ -267,12 +267,12 @@
           "max": 1536,
           "default": 1024,
           "step": 64,
-          "recommendedMin": 768,
-          "recommendedMax": 1280,
+          "recommendedMin": 640,
+          "recommendedMax": 1536,
           "hardMin": 256,
           "hardMax": 4096,
           "unit": "px",
-          "description": "Krea 2 safe height. Keep both sides at or below ~1536 on 12 GB VRAM."
+          "description": "Krea 2 working height. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
         },
         "batch": {
           "label": "Batch",

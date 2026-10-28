@@ -113,6 +113,7 @@ def _range_value(
     *,
     integer: bool = False,
     align_step: bool = False,
+    warn_align: bool = True,
 ) -> float | int:
     """Validate one value against a pack range and return the normalized value."""
     label = str(rng.get("label") or field)
@@ -168,13 +169,14 @@ def _range_value(
         if step > 0:
             aligned = round(number / step) * step
             if abs(aligned - number) > 1e-9:
-                warnings.append(
-                    _issue(
-                        "normalized_step",
-                        f"{label} was aligned to the {_fmt(step)} step ({_fmt(aligned)}).",
-                        field,
+                if warn_align:
+                    warnings.append(
+                        _issue(
+                            "normalized_step",
+                            f"{label} was aligned to the {_fmt(step)} step ({_fmt(aligned)}).",
+                            field,
+                        )
                     )
-                )
                 number = aligned
                 if raw_in_range:
                     if number < hard_min or number > hard_max:
@@ -311,8 +313,29 @@ def _resolve_size(
         height = int(size)
         width = int(round(size * float(ratio["w"]) / max(1.0, float(ratio["h"]))))
 
-    width = _range_value(width_range, width, "width", errors, warnings, integer=True, align_step=True)
-    height = _range_value(height_range, height, "height", errors, warnings, integer=True, align_step=True)
+    # Ratio-derived dimensions are aligned every time (16:9 at 1152 becomes
+    # 1152x640). The UI now shows that derived size, so only explicit
+    # width/height requests should flag 64-step normalization as a warning.
+    width = _range_value(
+        width_range,
+        width,
+        "width",
+        errors,
+        warnings,
+        integer=True,
+        align_step=True,
+        warn_align=False,
+    )
+    height = _range_value(
+        height_range,
+        height,
+        "height",
+        errors,
+        warnings,
+        integer=True,
+        align_step=True,
+        warn_align=False,
+    )
     return int(width), int(height), ratio_id, max(int(width), int(height))
 
 
@@ -678,7 +701,26 @@ def _resolve_enhance(
         "modelExplicit": bool(str(requested_model).strip()),
         "systemPrompt": str(system_prompt or ""),
         "fallbackToOriginal": bool(raw.fallbackToOriginal) if raw is not None else False,
+        "unloadAfter": bool(raw.unloadAfter) if raw is not None else True,
     }
+
+
+async def _unload_ollama_text_model(model: str) -> tuple[bool, str]:
+    """Best-effort VRAM handoff: unload only a model that is already resident.
+
+    ``connectors.unload_ollama`` checks ``/api/ps`` first, so this can never
+    cause a model load. Failure is non-fatal: the prompt was already enhanced
+    and the image job should still run. The caller turns the returned error into
+    a job warning.
+    """
+    if not model:
+        return False, "No prompt-enhancement model was reported."
+    try:
+        result = await connectors.unload_ollama(model)
+    except Exception as err:  # noqa: BLE001 - an unload must never fail a job
+        return False, _err_text(err)
+    ok = bool(result.get("ok"))
+    return ok, "" if ok else str(result.get("message") or "Unload failed.")
 
 
 def _all_triggers(loras: list[dict]) -> list[str]:
@@ -1013,6 +1055,9 @@ def _job_params(
         },
         # Module-specific metadata.
         "recipeId": normalized["recipeId"],
+        "packId": normalized["model"].get("packId"),
+        "composer": normalized["model"].get("composer"),
+        "workflow": normalized["model"].get("workflow"),
         "modelId": normalized["model"]["id"],
         "modelName": normalized["model"]["label"],
         "modelShortLabel": normalized["model"].get("shortLabel") or normalized["model"]["label"],
@@ -1320,27 +1365,47 @@ async def _run_job(
                         # model when the caller explicitly chose it.
                         model=(enhance.get("model") or None) if enhance.get("modelExplicit") else None,
                         systemPrompt=enhance.get("systemPrompt") or None,
+                        unloadAfter=bool(enhance.get("unloadAfter", True)),
                     )
                 )
+                warnings = normalized["warnings"]
+                enhanced = {
+                    **enhance,
+                    "mode": "applied",
+                    "provider": result["provider"],
+                    "model": result["model"],
+                }
+                if result.get("unloadError"):
+                    enhanced["unloadError"] = result["unloadError"]
+                    warnings = warnings + [
+                        _issue(
+                            "enhance_unload_failed",
+                            "Prompt enhancement succeeded, but the enhancement model could not be "
+                            "unloaded; ComfyUI may have less VRAM available. "
+                            f"{result['unloadError']}",
+                            "enhance.unloadAfter",
+                        )
+                    ]
                 normalized = {
                     **normalized,
                     "basePrompt": result["prompt"],
                     "promptUsed": _inject_triggers(result["prompt"], normalized["loras"], normalized["autoTriggers"]),
-                    "enhance": {
-                        **enhance,
-                        "mode": "applied",
-                        "provider": result["provider"],
-                        "model": result["model"],
-                    },
+                    "enhance": enhanced,
+                    "warnings": warnings,
                 }
                 jobs.update_job(
                     job_id,
                     {
                         "enhancedPrompt": result["prompt"],
-                        "params": _job_params(normalized, None, warnings=normalized["warnings"]),
+                        "params": _job_params(normalized, None, warnings=warnings),
                     },
                 )
-                tracker.done("enhance", f"{result['provider']} / {result['model']} in {result['durationMs']} ms")
+                detail = f"{result['provider']} / {result['model']} in {result['durationMs']} ms"
+                if result.get("unloaded"):
+                    detail += " · text model unloaded"
+                elif result.get("unloadError"):
+                    detail += " · unload failed"
+                tracker.done("enhance", detail)
             except Exception as err:  # noqa: BLE001 - fallback is an explicit user choice
                 if enhance.get("fallbackToOriginal"):
                     normalized = {
@@ -1540,8 +1605,17 @@ async def _resume_job(job: dict, prompt_id: str, cancel_event: asyncio.Event, li
 # -- public service API ---------------------------------------------------------
 
 
+def _pack_for_request(model_id: str | None) -> dict:
+    """Resolve the pack that owns the selected model; fall back to the default."""
+    if model_id:
+        pack = catalog.pack_for_model(model_id)
+        if pack is not None:
+            return pack
+    return catalog.load_pack()
+
+
 async def catalog_snapshot(model_id: str | None = None) -> dict:
-    pack = catalog.load_pack()
+    pack = _pack_for_request(model_id)
     user = catalog.load_user_catalog()
     if model_id and model_id not in pack["models"]:
         raise ValidationError(
@@ -1670,12 +1744,16 @@ def pack_info() -> dict:
     return {
         "ok": True,
         "version": pack["version"],
+        "pack": {"id": pack["id"], "label": pack["label"]},
         "recipe": pack["recipe"],
         "models": [
             {
                 "id": item["id"],
                 "label": item["label"],
                 "base": item["base"],
+                "packId": item["packId"],
+                "composer": item["composer"],
+                "workflow": item["workflow"],
                 "loader": item["loader"],
                 "verified": item["verified"],
                 "tested": item["tested"],
@@ -1709,7 +1787,7 @@ def pack_info() -> dict:
 
 
 def validate_payload(payload: T2IJobRequest) -> dict:
-    pack = catalog.load_pack()
+    pack = _pack_for_request(payload.modelId)
     normalized = _normalize_request(payload, pack)
     graph, meta = workflows.compose_t2i(pack, normalized["model"], normalized, job_id="preview")
     return {
@@ -1838,9 +1916,23 @@ async def enhance_prompt(payload: T2IEnhanceRequest) -> dict:
                 system=str(system_prompt or ""),
                 options=options,
                 timeout=float(cfg["ollama"]["timeoutSeconds"]),
+                # Enhancement needs the final rewrite, not a reasoning trace.
+                # Without this a thinking model can spend the whole num_predict
+                # budget in `thinking` and return an empty `response`.
+                think=False,
             )
         except Exception as err:  # noqa: BLE001 - report a useful engine error
+            if payload.unloadAfter:
+                _, unload_error = await _unload_ollama_text_model(model)
+                if unload_error:
+                    logger.warning("T2I enhancement model unload failed (%s): %s", model, unload_error)
             raise EngineError(f"Ollama enhancement failed ({model}): {_err_text(err)}") from err
+        unloaded = False
+        unload_error = ""
+        if payload.unloadAfter:
+            unloaded, unload_error = await _unload_ollama_text_model(model)
+            if unload_error:
+                logger.warning("T2I enhancement model unload failed (%s): %s", model, unload_error)
         text = str(data.get("response") or "").strip()
         if not text:
             raise EngineError(f"Ollama returned an empty enhancement from {model}.")
@@ -1850,6 +1942,8 @@ async def enhance_prompt(payload: T2IEnhanceRequest) -> dict:
             "provider": "ollama",
             "model": model,
             "durationMs": int((time.monotonic() - started) * 1000),
+            "unloaded": unloaded,
+            "unloadError": unload_error or None,
         }
 
     # ComfyUI enhancement
@@ -1951,7 +2045,7 @@ async def enhance_prompt(payload: T2IEnhanceRequest) -> dict:
 
 
 async def start_job(payload: T2IJobRequest) -> dict:
-    pack = catalog.load_pack()
+    pack = _pack_for_request(payload.modelId)
     normalized = _normalize_request(payload, pack)
     # Compose once with a temporary prefix so graph errors surface before a job
     # exists. The real prefix is set after the job id is allocated.
@@ -2042,16 +2136,7 @@ def delete_job(job_id: str, *, delete_assets: bool = True) -> dict | None:
             [_issue("job_running", "Cancel this job before deleting it.", "jobId")]
         )
 
-    trashed: list[str] = []
-    missing: list[str] = []
-    if delete_assets:
-        for asset_id in job.get("resultIds") or []:
-            asset = library.trash_asset(str(asset_id))
-            if asset is None:
-                missing.append(str(asset_id))
-            else:
-                trashed.append(str(asset["id"]))
-
+    trashed, missing = _trash_job_assets(job) if delete_assets else ([], [])
     if not jobs.delete_job(job_id):
         return None
     _CANCEL.pop(job_id, None)
@@ -2059,6 +2144,73 @@ def delete_job(job_id: str, *, delete_assets: bool = True) -> dict | None:
     return {
         "id": job_id,
         "deleted": True,
+        "assetsTrashed": trashed,
+        "assetsMissing": missing,
+    }
+
+
+def _trash_job_assets(job: dict) -> tuple[list[str], list[str]]:
+    trashed: list[str] = []
+    missing: list[str] = []
+    for asset_id in job.get("resultIds") or []:
+        asset = library.trash_asset(str(asset_id))
+        if asset is None:
+            missing.append(str(asset_id))
+        else:
+            trashed.append(str(asset["id"]))
+    return trashed, missing
+
+
+def clear_history(*, delete_assets: bool = False) -> dict:
+    """Clear this module's chat history without touching any other GenModule.
+
+    Running jobs are deliberately rejected rather than silently cancelled: the
+    caller may still want the result, and deleting a live record would let the
+    runner finish against a hidden job. With ``delete_assets`` the result files
+    are moved through the library trash path, so they stay recoverable.
+    """
+    current = jobs.list_jobs(limit=10_000, module=MODULE_ID)
+    active = [
+        str(job["id"])
+        for job in current
+        if job.get("status") in {"queued", "running"}
+    ]
+    if active:
+        raise ValidationError(
+            [
+                _issue(
+                    "job_running",
+                    "Cancel the active generation before clearing this chat.",
+                    "jobId",
+                    jobIds=active,
+                )
+            ]
+        )
+
+    job_ids: list[str] = []
+    trashed: list[str] = []
+    missing: list[str] = []
+    seen_assets: set[str] = set()
+    for job in current:
+        job_id = str(job["id"])
+        if delete_assets:
+            job_trashed, job_missing = _trash_job_assets(job)
+            for asset_id in job_trashed:
+                if asset_id not in seen_assets:
+                    seen_assets.add(asset_id)
+                    trashed.append(asset_id)
+            for asset_id in job_missing:
+                if asset_id not in seen_assets:
+                    seen_assets.add(asset_id)
+                    missing.append(asset_id)
+        if jobs.delete_job(job_id):
+            job_ids.append(job_id)
+            _CANCEL.pop(job_id, None)
+            _TASKS.pop(job_id, None)
+
+    return {
+        "deleted": len(job_ids),
+        "jobIds": job_ids,
         "assetsTrashed": trashed,
         "assetsMissing": missing,
     }

@@ -121,6 +121,27 @@ release that needs no Node, build the frontend first and include
 - **Folder browser** - folder fields have a real native "Browse..." dialog (the dialog
   opens on the machine running the backend).
 
+## Build your own GenModule
+
+Want Image → Image, Image → Video, or another workflow? The app does not
+auto-discover modules, so start from `backend/app/GenModules/_template/`, copy
+and rename it, then add the three host registrations (backend router, Vue route,
+sidebar item) in `docs/GENMODULE_GUIDE.md` §3. New tabs use the existing grouped
+sidebar in `frontend/src/lib/nav.ts`; `soon: true` is only the placeholder flag,
+so remove it when the module is live. Image → Video also needs the shared
+library/viewer change noted in the guide.
+
+Paste this into your AI agent:
+
+> Read `docs/GENMODULE_GUIDE.md`. Build an Image → Image (or Image → Video)
+> GenModule from `backend/app/GenModules/_template`. Follow §3 to copy/rename it
+> and register the backend router, Vue route, and grouped sidebar item. Keep
+> defaults and ranges in the tracked pack JSON; expose them via `/catalog` so
+> sliders and selects only offer supported values. Run the §3.6 checks and §8.5
+> smoke test. Use `T2I_main` only as the ComfyUI reference; do not modify it.
+
+`docs/PACKS.md` covers packs; `docs/MODEL_CATALOG.md` covers per-model ranges.
+
 ## Agents (MCP)
 
 The backend doubles as an MCP server (stdio transport). Enable it in
@@ -178,7 +199,7 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/MODEL_CATALOG.md` | editable model/LoRA metadata: links, strength ranges, triggers, API |
 | `docs/PACKS.md` | ComfyUI workflow -> pack/recipe guide |
 | `docs/GUI_GUIDELINES.md` | frontend conventions for every new module |
-| `docs/GENMODULE_GUIDE.md` | reusable GenModule architecture, packs, jobs, library and media viewer |
+| `docs/GENMODULE_GUIDE.md` | reusable GenModule guide: `_template` starter, host registration, packs, jobs, library and media viewer |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
 | `tools/README.md` | setup checks, portable uv/Python/Node, frontend rebuild rules |

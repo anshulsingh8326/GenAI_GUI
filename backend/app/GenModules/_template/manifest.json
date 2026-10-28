@@ -1,8 +1,15 @@
 {
   "id": "template",
+  "navId": "template",
   "name": "Template",
   "group": "image",
   "version": "0.1.0",
-  "description": "Copy of the GenModule template - not a real capability.",
-  "recipeIds": []
+  "status": "installed",
+  "description": "Copy-paste GenModule starter. Renders a deterministic placeholder SVG so the full job, library, history and deletion contract works without a model; replace the renderer with your engine pipeline.",
+  "entrypoint": "backend.api:router",
+  "apiPrefix": "/api/template",
+  "frontend": "frontend/TemplatePage.vue",
+  "recipeIds": ["template-card-v1"],
+  "capabilities": ["template", "placeholder-render"],
+  "excludes": ["reference-image", "video", "audio"]
 }

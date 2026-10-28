@@ -45,6 +45,7 @@ const emit = defineEmits<{
 const library = useLibraryStore()
 const ui = useUiStore()
 const menuOpen = ref(false)
+const deleteMenuOpen = ref(false)
 
 const params = computed<Partial<T2IJobParams>>(() => props.job.params ?? {})
 const isRunning = computed(
@@ -71,6 +72,11 @@ const finalSize = computed(() => {
 const promptUsed = computed(() => params.value.promptUsed || '')
 const negativePrompt = computed(() => params.value.negativePrompt || '')
 const warnings = computed(() => params.value.warnings ?? [])
+const baseSeed = computed(() => Number(params.value.seed ?? props.job.seed ?? 0))
+const batchSize = computed(() => {
+  const value = Number(params.value.batch ?? props.job.resultIds?.length ?? 1)
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1
+})
 
 const resultAssets = computed<Asset[]>(() =>
   (props.job.resultIds ?? [])
@@ -87,7 +93,7 @@ const resultAssets = computed<Asset[]>(() =>
         label: `${props.job.id} result ${index + 1}`,
         prompt: props.job.prompt,
         model: props.job.modelName,
-        seed: Number(params.value.seed ?? props.job.seed ?? 0) + index,
+        seed: (baseSeed.value + index) & 0xffffffff,
         createdAt: props.job.createdAt,
         favorite: false,
         tags: [],
@@ -119,7 +125,7 @@ const upscaleSummary = computed(() => {
   return `${item.label}${value}${out}`
 })
 
-const settingsRows = computed(() => {
+function settingsRowsFor(imageSeed?: number): Array<{ label: string; value: string }> {
   const rows: Array<{ label: string; value: string }> = []
   const add = (label: string, value: unknown): void => {
     if (value === null || value === undefined || String(value).trim() === '') return
@@ -134,7 +140,12 @@ const settingsRows = computed(() => {
   add('Base size', baseSize.value)
   add('Final size', finalSize.value)
   add('Batch', params.value.batch)
-  add('Seed', params.value.seed ?? props.job.seed)
+  if (imageSeed != null) {
+    add('Seed', imageSeed)
+    if (batchSize.value > 1) add('Base seed', baseSeed.value)
+  } else {
+    add(batchSize.value > 1 ? 'Base seed' : 'Seed', baseSeed.value)
+  }
   add('Seed randomized', params.value.seedRandomized ? 'yes' : 'no')
   add('Lock seed', params.value.lockSeed ? 'yes' : 'no')
   add('Steps', params.value.steps)
@@ -157,18 +168,23 @@ const settingsRows = computed(() => {
   add('Engine', params.value.engine)
   add('Workflow nodes', params.value.workflowNodeCount)
   return rows
-})
+}
+
+const settingsRows = computed(() => settingsRowsFor())
 
 const viewerItems = computed<MediaViewerItem[]>(() =>
-  resultAssets.value.map((asset, index) => ({
-    id: asset.id,
-    url: asset.url,
-    thumbUrl: asset.thumbUrl,
-    label: asset.label || `${props.job.id} · result ${index + 1}`,
-    prompt: props.job.prompt,
-    filename: `${props.job.id.replace('#', 'job-')}-${index + 1}.png`,
-    meta: settingsRows.value,
-  })),
+  resultAssets.value.map((asset, index) => {
+    const seed = Number.isFinite(asset.seed) ? asset.seed : (baseSeed.value + index) & 0xffffffff
+    return {
+      id: asset.id,
+      url: asset.url,
+      thumbUrl: asset.thumbUrl,
+      label: asset.label || `${props.job.id} · result ${index + 1}`,
+      prompt: props.job.prompt,
+      filename: `${props.job.id.replace('#', 'job-')}-${index + 1}.png`,
+      meta: settingsRowsFor(seed),
+    }
+  }),
 )
 
 const stageRows = computed<Stage[]>(() =>
@@ -257,7 +273,19 @@ function useSeed(): void {
 
 function remove(deleteAssets: boolean): void {
   emit('delete', props.job, deleteAssets)
-  menuOpen.value = false
+  deleteMenuOpen.value = false
+}
+
+async function removeAsset(asset: Asset): Promise<void> {
+  const label = asset.label || asset.id
+  if (
+    !window.confirm(
+      `Move “${label}” to the library trash? The chat message stays, but the image leaves the Library.`,
+    )
+  ) {
+    return
+  }
+  await library.trash(asset.id)
 }
 
 function cancel(): void {
@@ -378,6 +406,15 @@ function cancel(): void {
                 >
                   <Maximize2 class="h-3.5 w-3.5" />
                 </button>
+                <button
+                  type="button"
+                  class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-black/45 text-white/85 backdrop-blur transition-colors hover:bg-danger/80"
+                  title="Move this image to the library trash"
+                  aria-label="Move this image to the library trash"
+                  @click.stop="removeAsset(asset)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </div>
@@ -428,6 +465,50 @@ function cancel(): void {
             Download
           </AppButton>
 
+          <AppPopover v-if="isTerminal" v-model="deleteMenuOpen" align="right" up width="18rem">
+            <template #trigger>
+              <button
+                type="button"
+                class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger/10"
+                title="Delete this generation"
+                @click="deleteMenuOpen = !deleteMenuOpen"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </template>
+
+            <div class="space-y-1">
+              <p class="px-2 text-[11px] font-semibold">Delete {{ job.id }}</p>
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-2"
+                @click="remove(false)"
+              >
+                <Trash2 class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+                <span class="min-w-0">
+                  <span class="block text-xs font-medium text-text">Remove message only</span>
+                  <span class="block text-[10px] leading-snug text-muted">
+                    The result images stay in the Library.
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                class="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-danger/10"
+                @click="remove(true)"
+              >
+                <Trash2 class="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+                <span class="min-w-0">
+                  <span class="block text-xs font-medium text-danger">Delete message + images</span>
+                  <span class="block text-[10px] leading-snug text-muted">
+                    Move {{ resultAssets.length }} result image{{ resultAssets.length === 1 ? '' : 's' }} to the library trash.
+                  </span>
+                </span>
+              </button>
+            </div>
+          </AppPopover>
+
           <AppPopover v-model="menuOpen" align="right" up width="16rem">
             <template #trigger>
               <button
@@ -435,6 +516,7 @@ function cancel(): void {
                 class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text"
                 title="More actions"
                 aria-label="More actions"
+                @click="menuOpen = !menuOpen"
               >
                 <MoreHorizontal class="h-4 w-4" />
               </button>
@@ -463,24 +545,6 @@ function cancel(): void {
               >
                 <Download class="h-3.5 w-3.5" /> Download all
               </button>
-
-              <template v-if="isTerminal">
-                <div class="my-1 border-t border-border" />
-                <button
-                  type="button"
-                  class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted transition-colors hover:bg-surface-2 hover:text-text"
-                  @click="remove(false)"
-                >
-                  <Trash2 class="h-3.5 w-3.5" /> Remove message only
-                </button>
-                <button
-                  type="button"
-                  class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger/10"
-                  @click="remove(true)"
-                >
-                  <Trash2 class="h-3.5 w-3.5" /> Delete images & message
-                </button>
-              </template>
             </div>
           </AppPopover>
         </div>

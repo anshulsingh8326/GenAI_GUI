@@ -1,0 +1,8 @@
+# FusionHex TimeMachine Ignore File
+node_modules/
+build/
+dist/
+venv/
+.git/
+__pycache__/
+*.mp4

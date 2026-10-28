@@ -1,8 +1,10 @@
 """ComfyUI API-format graph composition for T2I_main.
 
-The tracked template is a complete Freeze-v8-style T2I graph (base sampler,
-latent refine, save) plus the default five-LoRA chain. The composer rewrites
-only what the request changes:
+Each pack ships its own API-format workflow. ``compose_t2i`` resolves the
+selected model's ``composer`` and workflow, then delegates to that family's
+small composer. The Krea 2 template is a complete Freeze-v8-style T2I graph
+(base sampler, latent refine, save) plus the default five-LoRA chain. The Krea
+composer rewrites only what the request changes:
 
 - model loader / text encoder / VAE bindings
 - prompt and negative prompt
@@ -75,6 +77,22 @@ def assert_no_switches(graph: dict) -> None:
             raise WorkflowError(f"Switch node `{class_type}` (id {node_id}) is not allowed in T2I graphs.")
 
 
+def _workflow_for_model(pack: dict, model: dict) -> tuple[str, dict]:
+    """Resolve a model's workflow inside its pack; never cross packs."""
+    path = str(model.get("workflow") or pack.get("recipe", {}).get("workflow") or "").strip()
+    if not path:
+        raise WorkflowError(f"Model `{model.get('id')}` has no workflow path.")
+    workflows = pack.get("workflows") or {}
+    graph = workflows.get(path)
+    if graph is None and path == pack.get("recipe", {}).get("workflow"):
+        graph = pack.get("workflow")
+    if not isinstance(graph, dict) or not graph:
+        raise WorkflowError(
+            f"Workflow `{path}` is not loaded for pack `{pack.get('id', '?')}`."
+        )
+    return path, graph
+
+
 def compose_t2i(
     pack: dict,
     model: dict,
@@ -82,9 +100,36 @@ def compose_t2i(
     *,
     job_id: str = "preview",
 ) -> tuple[dict, dict]:
-    """Build a runnable ComfyUI API prompt for one T2I request."""
-    graph = copy.deepcopy(pack["workflow"])
+    """Dispatch to the model's composer, then build its ComfyUI API prompt."""
+    composer = str(model.get("composer") or pack.get("recipe", {}).get("composer") or "krea2")
+    handler = COMPOSERS.get(composer)
+    if handler is None:
+        raise WorkflowError(
+            f"No composer registered for `{composer}` (model `{model.get('id')}`). "
+            f"Known composers: {', '.join(sorted(COMPOSERS))}."
+        )
+    path, workflow = _workflow_for_model(pack, model)
+    graph, meta = handler(copy.deepcopy(workflow), pack, model, normalized, job_id=job_id)
+    meta["packId"] = pack.get("id")
+    meta["composer"] = composer
+    meta["workflow"] = path
+    return graph, meta
+
+
+def _compose_krea2(
+    graph: dict,
+    pack: dict,
+    model: dict,
+    normalized: dict,
+    *,
+    job_id: str = "preview",
+) -> tuple[dict, dict]:
+    """Build a Krea 2 graph from the pack's already-validated API template."""
     options = pack["options"]
+    if model["loader"] not in {"UNETLoader", "UnetLoaderGGUF"}:
+        raise WorkflowError(
+            f"Krea 2 composer cannot load `{model['loader']}` (model `{model['id']}`)."
+        )
 
     # -- loaders ------------------------------------------------------------
     loader = _node(graph, "1")
@@ -277,6 +322,13 @@ def compose_t2i(
         },
     }
     return graph, meta
+
+
+# One small dispatch table, one composer per family. A new family adds a
+# composer and its own API graph; it does not add branches to _compose_krea2.
+COMPOSERS = {
+    "krea2": _compose_krea2,
+}
 
 
 def compose_enhance(

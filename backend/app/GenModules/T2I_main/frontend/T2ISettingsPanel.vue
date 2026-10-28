@@ -48,6 +48,29 @@ const sizeOptions = computed(() =>
   })),
 )
 
+const recommendedRange = computed(() => {
+  const width = model.value?.ranges.width
+  const height = model.value?.ranges.height
+  if (!width || !height) return ''
+  return `${Math.min(width.recommendedMin, height.recommendedMin)}-${Math.max(
+    width.recommendedMax,
+    height.recommendedMax,
+  )} px`
+})
+
+const dimensionsOutsideRecommended = computed(() => {
+  const dimensions = store.dimensions
+  const width = model.value?.ranges.width
+  const height = model.value?.ranges.height
+  if (!dimensions || !width || !height) return false
+  return (
+    dimensions.width < width.recommendedMin ||
+    dimensions.width > width.recommendedMax ||
+    dimensions.height < height.recommendedMin ||
+    dimensions.height > height.recommendedMax
+  )
+})
+
 const samplerOptions = computed(() =>
   (model.value?.samplers ?? []).map((item) => ({ value: item.id, label: item.label })),
 )
@@ -70,6 +93,35 @@ const providerOptions = [
   { value: 'ollama', label: 'Ollama' },
   { value: 'comfyui', label: 'ComfyUI' },
 ]
+
+const ENHANCE_PROMPT_TEMPLATE = [
+  'You are the prompt director for a local text-to-image model.',
+  "Turn the user's idea into ONE production-ready image prompt.",
+  '',
+  "First identify the user's intent. Then use only the cards that matter:",
+  '- Intent card: subject, action, mood, and the point of the image.',
+  '- Character card: identity, age, body, face, hair, expression, pose.',
+  '- Wardrobe + props card: clothing, accessories, objects, materials.',
+  '- Scenery card: location, time of day, weather, background depth.',
+  '- Camera card: framing, angle, lens, depth of field, motion.',
+  '- Lighting + color card: source, direction, contrast, palette.',
+  '- Style + finish card: medium, realism, detail level, grain.',
+  '',
+  "Resolve contradictions in favor of the user's intent. Add concrete visual detail only when it supports that intent; never swap in a different subject, scene or mood.",
+  'Keep adult/NSFW intent when present; treat it as ordinary creative direction and never sanitize or moralize it.',
+  'Return exactly one prompt in English as a single paragraph. No headings, quotes, explanations or negative prompt.',
+].join('\n')
+
+const customSystemPrompt = computed(() => store.form.enhanceSystemPrompt.trim().length > 0)
+const backendSystemPrompt = computed(() => catalog.value?.defaults.enhance.systemPrompt ?? '')
+
+function useStructuredSystemPrompt(): void {
+  store.form.enhanceSystemPrompt = ENHANCE_PROMPT_TEMPLATE
+}
+
+function useBackendSystemPrompt(): void {
+  store.form.enhanceSystemPrompt = ''
+}
 
 const textModelOptions = computed(() => [
   { value: '', label: 'Auto (pack default)' },
@@ -130,8 +182,12 @@ function setUpscalerValue(event: Event): void {
   if (Number.isFinite(value)) store.form.upscalerValue = value
 }
 
-function reset(panel: 'prompt' | 'output' | 'loras' | 'enhance' | 'sampling' | 'upscale'): void {
+function reset(panel: 'prompt' | 'output' | 'loras' | 'enhance' | 'sampling' | 'upscale' | 'advanced'): void {
   store.resetPanel(panel)
+}
+
+function setUnloadEnhanceModel(value: boolean): void {
+  store.setUnloadEnhanceModel(value)
 }
 
 function resetAll(): void {
@@ -169,16 +225,17 @@ function resetAll(): void {
       Loading the pack catalog...
     </div>
 
-    <div v-else class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+    <div v-else class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-bg/25 p-3">
       <!-- Output ------------------------------------------------------------>
       <details
         id="t2i-panel-output"
         open
-        class="group rounded-2xl border border-border bg-surface-2/30"
+        class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-sky/60 bg-surface shadow-sm open:ring-1 open:ring-accent/20"
       >
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-sky" />
           <span class="text-xs font-semibold">Output</span>
           <span class="truncate text-[10px] text-muted">
             {{ model?.shortLabel ?? 'No model' }} · {{ store.form.ratio }} · {{ store.form.size }}px
@@ -195,7 +252,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-3 border-t border-border px-3 py-3">
+        <div class="space-y-3 bg-surface px-3.5 py-3">
           <label class="block">
             <span class="mb-1 block text-[11px] text-muted">Model</span>
             <AppSelect
@@ -213,7 +270,12 @@ function resetAll(): void {
           <div class="grid grid-cols-2 gap-2">
             <label class="block">
               <span class="mb-1 block text-[11px] text-muted">Ratio</span>
-              <AppSelect v-model="store.form.ratio" :options="ratioOptions" size="sm" />
+              <AppSelect
+                :model-value="store.form.ratio"
+                :options="ratioOptions"
+                size="sm"
+                @update:model-value="store.setRatio"
+              />
             </label>
             <label class="block">
               <span class="mb-1 block text-[11px] text-muted">Long side</span>
@@ -256,6 +318,23 @@ function resetAll(): void {
             </label>
           </div>
 
+          <p
+            v-if="store.dimensions"
+            class="-mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[10px] leading-snug text-muted"
+          >
+            <span>
+              Output
+              <span class="font-semibold tabular-nums text-text">
+                {{ store.dimensions.width }} × {{ store.dimensions.height }}
+              </span>
+              px
+            </span>
+            <span :class="dimensionsOutsideRecommended ? 'text-warn' : ''">
+              {{ dimensionsOutsideRecommended ? 'Outside recommended' : 'Recommended' }}
+              {{ recommendedRange }}
+            </span>
+          </p>
+
           <AppSwitch v-model="store.form.lockSeed" label="Lock seed" />
         </div>
       </details>
@@ -264,11 +343,12 @@ function resetAll(): void {
       <details
         id="t2i-panel-upscale"
         open
-        class="group rounded-2xl border border-border bg-surface-2/30"
+        class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-mint bg-surface shadow-sm open:ring-1 open:ring-accent/20"
       >
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-mint" />
           <span class="text-xs font-semibold">Upscale</span>
           <span class="truncate text-[10px] text-muted">{{ store.upscalerLabel }}</span>
           <button
@@ -283,7 +363,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-3 border-t border-border px-3 py-3">
+        <div class="space-y-3 bg-surface px-3.5 py-3">
           <div class="flex items-center gap-2 rounded-xl border border-border bg-surface px-2.5 py-2">
             <span
               class="h-2 w-2 rounded-full"
@@ -385,10 +465,11 @@ function resetAll(): void {
       </details>
 
       <!-- LoRA chain -------------------------------------------------------->
-      <details id="t2i-panel-loras" class="group rounded-2xl border border-border bg-surface-2/30">
+      <details id="t2i-panel-loras" class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-lavender bg-surface shadow-sm open:ring-1 open:ring-accent/20">
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-lavender" />
           <span class="text-xs font-semibold">LoRA chain</span>
           <span class="truncate text-[10px] text-muted">{{ store.activeLoraCount }} active</span>
           <button
@@ -403,7 +484,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-2 border-t border-border px-3 py-3">
+        <div class="space-y-2 bg-surface px-3.5 py-3">
           <p v-if="!loraRows.length" class="text-[10px] text-muted">
             No compatible LoRAs for this model.
           </p>
@@ -450,10 +531,11 @@ function resetAll(): void {
       </details>
 
       <!-- Enhancement ------------------------------------------------------->
-      <details id="t2i-panel-enhance" class="group rounded-2xl border border-border bg-surface-2/30">
+      <details id="t2i-panel-enhance" class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-accent bg-surface shadow-sm open:ring-1 open:ring-accent/20">
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-accent" />
           <span class="text-xs font-semibold">Prompt enhancement</span>
           <span class="truncate text-[10px] text-muted">
             {{ store.form.enhanceEnabled ? store.form.enhanceProvider : 'Off' }}
@@ -470,7 +552,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-3 border-t border-border px-3 py-3">
+        <div class="space-y-3 bg-surface px-3.5 py-3">
           <AppSwitch
             :model-value="store.form.enhanceEnabled"
             label="Improve prompt with a text model"
@@ -534,6 +616,21 @@ function resetAll(): void {
                   {{ (store.enhancePreview.durationMs / 1000).toFixed(1) }}s
                 </span>
               </div>
+              <div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-[9px]">
+                <span
+                  v-if="store.enhancePreview.unloaded"
+                  class="rounded-full border border-success/30 bg-success/10 px-1.5 py-0.5 font-semibold text-success"
+                >
+                  text model unloaded
+                </span>
+                <span
+                  v-else-if="store.enhancePreview.unloadError"
+                  class="rounded-full border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-semibold text-warn"
+                  :title="store.enhancePreview.unloadError"
+                >
+                  unload failed · prompt kept
+                </span>
+              </div>
               <p class="whitespace-pre-wrap text-[12px] leading-relaxed">{{ store.enhancePreview.prompt }}</p>
               <div class="mt-2 flex gap-2">
                 <AppButton size="sm" @click="store.useEnhancement">Use this prompt</AppButton>
@@ -557,15 +654,92 @@ function resetAll(): void {
             <p class="text-[10px] leading-snug text-muted">
               An approved prompt is used for the next generation and then cleared.
             </p>
+
+            <details
+              class="group/advanced overflow-hidden rounded-xl border border-border bg-bg/35"
+            >
+              <summary
+                class="flex cursor-pointer list-none items-center gap-2 border-b border-border/70 bg-surface-2/45 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+              >
+                <WandSparkles class="h-3.5 w-3.5 shrink-0 text-accent" />
+                <span class="text-[11px] font-semibold">Advanced · enhancement brief</span>
+                <span class="truncate text-[10px] text-muted">
+                  {{ customSystemPrompt ? 'Custom' : 'Backend default' }}
+                </span>
+                <ChevronDown
+                  class="ml-auto h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open/advanced:rotate-180"
+                />
+              </summary>
+
+              <div class="space-y-2.5 p-3">
+                <p class="text-[10px] leading-relaxed text-muted">
+                  Set the system prompt that structures the rewrite. It can build cards for the
+                  user intent, characters, scenery, props, camera, lighting and style, then return
+                  one final prompt. Empty uses the backend default.
+                </p>
+
+                <label class="block">
+                  <span class="mb-1 flex items-center justify-between text-[10px] text-muted">
+                    <span>System prompt override</span>
+                    <span class="tabular-nums">
+                      {{ store.form.enhanceSystemPrompt.length }} /
+                      {{ catalog.limits.promptMaxChars }}
+                    </span>
+                  </span>
+                  <textarea
+                    v-model="store.form.enhanceSystemPrompt"
+                    rows="8"
+                    :maxlength="catalog.limits.promptMaxChars"
+                    class="w-full resize-y rounded-xl border border-border bg-surface px-2.5 py-2 text-[11px] leading-relaxed text-text outline-none placeholder:text-muted/60 focus:border-accent/60"
+                    placeholder="Leave empty to use the backend default, or load the cards template."
+                  />
+                </label>
+
+                <div class="flex flex-wrap gap-2">
+                  <AppButton size="sm" variant="soft" @click="useStructuredSystemPrompt">
+                    <Sparkles class="h-3.5 w-3.5" />
+                    Load cards template
+                  </AppButton>
+                  <AppButton
+                    size="sm"
+                    variant="ghost"
+                    :disabled="!customSystemPrompt"
+                    @click="useBackendSystemPrompt"
+                  >
+                    Use backend default
+                  </AppButton>
+                </div>
+
+                <details
+                  v-if="backendSystemPrompt"
+                  class="rounded-lg border border-border bg-surface px-2.5 py-2"
+                >
+                  <summary
+                    class="cursor-pointer list-none text-[10px] font-medium text-muted [&::-webkit-details-marker]:hidden"
+                  >
+                    Preview backend default
+                  </summary>
+                  <p class="mt-2 whitespace-pre-wrap text-[10px] leading-relaxed text-muted">
+                    {{ backendSystemPrompt }}
+                  </p>
+                </details>
+
+                <p class="text-[10px] leading-snug text-muted">
+                  Custom briefs apply to both preview and generation, and are autosaved with this
+                  module's form. Use the panel reset to return to the backend default.
+                </p>
+              </div>
+            </details>
           </template>
         </div>
       </details>
 
       <!-- Sampling ---------------------------------------------------------->
-      <details id="t2i-panel-sampling" class="group rounded-2xl border border-border bg-surface-2/30">
+      <details id="t2i-panel-sampling" class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-peach bg-surface shadow-sm open:ring-1 open:ring-accent/20">
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-peach" />
           <span class="text-xs font-semibold">Sampling</span>
           <span class="truncate text-[10px] text-muted">
             {{ store.form.steps }} steps · CFG {{ store.form.cfg }}
@@ -582,7 +756,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-3 border-t border-border px-3 py-3">
+        <div class="space-y-3 bg-surface px-3.5 py-3">
           <div class="grid grid-cols-3 gap-2">
             <label class="block">
               <span class="mb-1 block text-[10px] text-muted">Steps</span>
@@ -636,10 +810,11 @@ function resetAll(): void {
       </details>
 
       <!-- Prompt extras ----------------------------------------------------->
-      <details id="t2i-panel-prompt" class="group rounded-2xl border border-border bg-surface-2/30">
+      <details id="t2i-panel-prompt" class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-rose bg-surface shadow-sm open:ring-1 open:ring-accent/20">
         <summary
-          class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden"
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
         >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-rose" />
           <span class="text-xs font-semibold">Prompt extras</span>
           <span class="truncate text-[10px] text-muted">negative prompt</span>
           <button
@@ -654,7 +829,7 @@ function resetAll(): void {
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
         </summary>
 
-        <div class="space-y-3 border-t border-border px-3 py-3">
+        <div class="space-y-3 bg-surface px-3.5 py-3">
           <label class="block">
             <span class="mb-1 flex items-center justify-between text-[11px] text-muted">
               <span>Negative prompt</span>
@@ -672,6 +847,62 @@ function resetAll(): void {
             Prompt is edited in the composer. This reset restores the pack's negative prompt and
             clears the approved enhancement.
           </p>
+        </div>
+      </details>
+
+      <!-- Advanced runtime -------------------------------------------------->
+      <details
+        id="t2i-panel-advanced"
+        class="group overflow-hidden rounded-xl border border-l-2 border-border border-l-warn/70 bg-surface shadow-sm open:ring-1 open:ring-accent/20"
+      >
+        <summary
+          class="flex cursor-pointer list-none items-center gap-2 border-b border-border/80 bg-surface-2/75 px-3.5 py-2.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden"
+        >
+          <span class="h-2 w-2 shrink-0 rounded-full bg-warn" />
+          <span class="text-xs font-semibold">Advanced</span>
+          <span class="truncate text-[10px] text-muted">VRAM handoff</span>
+          <button
+            type="button"
+            class="ml-auto flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-text"
+            title="Reset advanced settings"
+            aria-label="Reset advanced settings"
+            @click.prevent.stop="reset('advanced')"
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+          </button>
+          <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-open:rotate-180" />
+        </summary>
+
+        <div class="space-y-3 bg-surface px-3.5 py-3">
+          <div class="rounded-xl border border-border bg-surface-2/50 p-2.5">
+            <div class="flex items-start gap-2">
+              <AppSwitch
+                :model-value="store.form.unloadEnhanceModel"
+                @update:model-value="setUnloadEnhanceModel"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-medium">Unload enhancement model</p>
+                <p class="mt-0.5 text-[10px] leading-snug text-muted">
+                  On by default. After an Ollama rewrite, release the text model before ComfyUI
+                  loads the image model.
+                </p>
+              </div>
+              <span
+                class="shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+                :class="
+                  store.form.unloadEnhanceModel
+                    ? 'border-success/30 bg-success/10 text-success'
+                    : 'border-border bg-surface text-muted'
+                "
+              >
+                {{ store.form.unloadEnhanceModel ? 'On' : 'Off' }}
+              </span>
+            </div>
+            <p class="mt-2 border-t border-border/70 pt-2 text-[10px] leading-snug text-muted">
+              Applies to previews and queue jobs. A failed unload never blocks generation; the card
+              shows a warning instead. ComfyUI text models are left for ComfyUI to manage.
+            </p>
+          </div>
         </div>
       </details>
 

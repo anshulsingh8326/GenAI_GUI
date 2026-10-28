@@ -19,7 +19,7 @@ import { placeholderImage } from './placeholder'
 export const imageModels: ModelOption[] = [
   {
     id: 'krea2-turbo-int8',
-    name: 'Krea 2 Turbo (int8)',
+    name: 'SNOFS-Krea2_Q8',
     family: 'qwen-image / krea2',
     kind: 'image',
     base: 'krea2',
@@ -30,7 +30,7 @@ export const imageModels: ModelOption[] = [
   },
   {
     id: 'krea2-turbo-q5',
-    name: 'Krea 2 Turbo GGUF (Q5_K_M)',
+    name: 'Krea2_Q5',
     family: 'qwen-image / krea2',
     kind: 'image',
     base: 'krea2',
@@ -169,20 +169,20 @@ function mkAsset(
 }
 
 export const seedAssets: Asset[] = [
-  mkAsset('a-101', 'chrome astronaut', 'studio portrait of a chrome astronaut, soft rim light, 85mm', 'Krea 2 Turbo (int8)', 572836350580, 4, ['t2i', 'portrait'], true),
-  mkAsset('a-102', 'neon ramen shop', 'cozy ramen shop at night, rain, neon reflections', 'Krea 2 Turbo (int8)', 105239326010, 30, ['t2i', 'scene']),
-  mkAsset('a-103', 'health potion icon', 'RPG item icon: health potion, chunky outlines, flat shading, plain background', 'Krea 2 Turbo (int8)', 88341209771, 55, ['t2i', 'game-assets'], true),
+  mkAsset('a-101', 'chrome astronaut', 'studio portrait of a chrome astronaut, soft rim light, 85mm', 'SNOFS-Krea2_Q8', 572836350580, 4, ['t2i', 'portrait'], true),
+  mkAsset('a-102', 'neon ramen shop', 'cozy ramen shop at night, rain, neon reflections', 'SNOFS-Krea2_Q8', 105239326010, 30, ['t2i', 'scene']),
+  mkAsset('a-103', 'health potion icon', 'RPG item icon: health potion, chunky outlines, flat shading, plain background', 'SNOFS-Krea2_Q8', 88341209771, 55, ['t2i', 'game-assets'], true),
   mkAsset('a-104', 'sorceress', 'ethereal sorceress with glowing runes, dark fantasy concept art', 'Qwen-Image 2.1 Turbo (Uncensored)', 441209112233, 90, ['t2i', 'fantasy']),
-  mkAsset('a-105', 'cyber street', 'neon cyberpunk street market, cinematic wide shot', 'Krea 2 Turbo (int8)', 771200983345, 120, ['t2i', 'scene']),
-  mkAsset('a-106', 'aria portrait', 'portrait of Aria in a summer dress, golden hour', 'Krea 2 Turbo (int8)', 92045577123, 150, ['t2i', 'character', 'aria'], true),
-  mkAsset('a-107', 'iron sword icon', 'RPG item icon: iron sword, chunky outlines, flat shading', 'Krea 2 Turbo (int8)', 556677889900, 160, ['t2i', 'game-assets']),
-  mkAsset('a-108', 'mana crystal', 'RPG item icon: mana crystal, glowing blue, flat shading', 'Krea 2 Turbo (int8)', 114455667788, 170, ['t2i', 'game-assets'], true),
-  mkAsset('a-109', 'desert dune', 'vast desert dunes at dusk, long shadows, minimal', 'Krea 2 Turbo GGUF (Q5_K_M)', 334455667788, 210, ['t2i', 'landscape']),
-  mkAsset('a-110', 'kade leather', 'Kade in worn leather armor, forest camp background', 'Krea 2 Turbo (int8)', 667788990011, 240, ['t2i', 'character', 'kade']),
-  mkAsset('a-111', 'treasure chest', 'RPG item icon: treasure chest, open lid, gold coins, flat shading', 'Krea 2 Turbo (int8)', 990011223344, 260, ['t2i', 'game-assets']),
+  mkAsset('a-105', 'cyber street', 'neon cyberpunk street market, cinematic wide shot', 'SNOFS-Krea2_Q8', 771200983345, 120, ['t2i', 'scene']),
+  mkAsset('a-106', 'aria portrait', 'portrait of Aria in a summer dress, golden hour', 'SNOFS-Krea2_Q8', 92045577123, 150, ['t2i', 'character', 'aria'], true),
+  mkAsset('a-107', 'iron sword icon', 'RPG item icon: iron sword, chunky outlines, flat shading', 'SNOFS-Krea2_Q8', 556677889900, 160, ['t2i', 'game-assets']),
+  mkAsset('a-108', 'mana crystal', 'RPG item icon: mana crystal, glowing blue, flat shading', 'SNOFS-Krea2_Q8', 114455667788, 170, ['t2i', 'game-assets'], true),
+  mkAsset('a-109', 'desert dune', 'vast desert dunes at dusk, long shadows, minimal', 'Krea2_Q5', 334455667788, 210, ['t2i', 'landscape']),
+  mkAsset('a-110', 'kade leather', 'Kade in worn leather armor, forest camp background', 'SNOFS-Krea2_Q8', 667788990011, 240, ['t2i', 'character', 'kade']),
+  mkAsset('a-111', 'treasure chest', 'RPG item icon: treasure chest, open lid, gold coins, flat shading', 'SNOFS-Krea2_Q8', 990011223344, 260, ['t2i', 'game-assets']),
   mkAsset('a-112', 'mira neon alley', 'Mira in a neon alley, rain, cyberpunk styling', 'Qwen-Image 2.1 Turbo (Uncensored)', 223344556677, 300, ['t2i', 'character', 'mira']),
-  mkAsset('a-113', 'vintage car', '1970s muscle car, vintage film look, grain, muted colors', 'Krea 2 Turbo (int8)', 445566778899, 340, ['t2i', 'vehicle']),
-  mkAsset('a-114', 'willow spirit', 'willow tree spirit, glowing leaves, soft fantasy', 'Krea 2 Turbo (int8)', 778899001122, 380, ['t2i', 'fantasy']),
+  mkAsset('a-113', 'vintage car', '1970s muscle car, vintage film look, grain, muted colors', 'SNOFS-Krea2_Q8', 445566778899, 340, ['t2i', 'vehicle']),
+  mkAsset('a-114', 'willow spirit', 'willow tree spirit, glowing leaves, soft fantasy', 'SNOFS-Krea2_Q8', 778899001122, 380, ['t2i', 'fantasy']),
 ]
 
 // -- jobs ----------------------------------------------------------------------
@@ -214,7 +214,7 @@ function adv(steps = 12, cfg = 2.5): AdvancedParams {
 export const seedJobs: JobRecord[] = [
   {
     id: '#141', createdAt: Date.now() - 46 * 60000, status: 'done', progress: 100,
-    tab: 'text-to-image', modelId: 'krea2-turbo-int8', modelName: 'Krea 2 Turbo (int8)', recipe: 'krea2-freeze',
+    tab: 'text-to-image', modelId: 'krea2-turbo-int8', modelName: 'SNOFS-Krea2_Q8', recipe: 'krea2-freeze',
     prompt: 'RPG item icon: health potion, chunky outlines, flat shading, plain background',
     seed: 88341209771, params: adv(), stages: stagesDone(true), resultIds: ['a-103'],
   },
@@ -226,7 +226,7 @@ export const seedJobs: JobRecord[] = [
   },
   {
     id: '#139', createdAt: Date.now() - 130 * 60000, status: 'done', progress: 100,
-    tab: 'text-to-image', modelId: 'krea2-turbo-int8', modelName: 'Krea 2 Turbo (int8)', recipe: 'krea2-freeze',
+    tab: 'text-to-image', modelId: 'krea2-turbo-int8', modelName: 'SNOFS-Krea2_Q8', recipe: 'krea2-freeze',
     prompt: 'studio portrait of a chrome astronaut, soft rim light, 85mm', enhancedPrompt: 'studio portrait of a chrome astronaut, soft rim light, 85mm, high detail reflective suit, dark studio backdrop',
     seed: 572836350580, params: adv(), stages: stagesDone(false), resultIds: ['a-101'],
   },

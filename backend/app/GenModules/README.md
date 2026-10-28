@@ -1,13 +1,19 @@
 # GenModules
 
-`GenModules` is the backend home of one generation workflow per folder. It is deliberately not
-called `modules` so it cannot be confused with general code modularity. Each generation feature
-(Text → Image, Image → Image, Edit, Face Swap, Video, Audio) owns a vertical slice that mirrors
-`frontend/src/features/<module-id>/`.
+`GenModules` is the backend home of one generation workflow per folder. It is
+deliberately not called `modules` so it cannot be confused with general code
+modularity. Each generation feature (Text → Image, Image → Image, Edit, Face
+Swap, Video, Audio) owns a vertical slice that mirrors
+`frontend/src/features/<nav-id>/`.
 
-`T2I_main` is the reference implementation. For the full reusable pattern — architecture, pack
-rules, job lifecycle, library sync, layout, persistence and the shared media viewer — read
+`_template` is the complete working starter. `T2I_main` is the engine-backed
+reference implementation. For architecture, host contracts, pack rules, job
+lifecycle, library sync, layout, persistence, and the shared media viewer, read
 [`docs/GENMODULE_GUIDE.md`](../../../docs/GENMODULE_GUIDE.md).
+
+**A folder copy is not registration.** The app does not auto-discover routers,
+Vue routes, or nav items. Every module needs the three host edits in the guide's
+§3: mount the backend router, add the Vue route, add the grouped nav item.
 
 ## What a module folder owns
 
@@ -18,57 +24,84 @@ backend/app/GenModules/<module-id>/
   backend/
     __init__.py
     api.py                   REST router (thin; mounted in app/api/__init__.py)
-    service.py               pipeline: validate -> enhance -> compose -> submit -> collect
+    service.py               pipeline: validate -> compose -> submit -> collect
     schema.py                request/response models specific to the module
     catalog.py               optional: pack + user catalog merge
     workflows.py             optional: ComfyUI API graph composition
     pack/                    authoritative model/LoRA/upscaler/recipe JSON
+      registry.json          optional: pack ids, labels, paths, default
+      packs/<pack-id>/       one model family/recipe; own workflows/*.api.json
   frontend/
-    README.md                canonical GUI/API contract
+    README.md                canonical frontend/API contract
     types.ts                 wire types
     api.ts                   module API client
     store.ts                 module Pinia store (form, persistence, jobs, actions)
-    T2IPage.vue              canonical route page
-    T2ISettingsPanel.vue     settings drawer (per-panel resets)
-    T2IGenerationCard.vue    chat result card + settings disclosure
+    <Module>Page.vue         canonical route page
+    <Module>SettingsPanel.vue settings drawer (per-panel resets)
+    <Module>GenerationCard.vue chat result card + settings disclosure
 ```
 
-The runtime app imports the frontend copies from `frontend/src/features/<module-id>/`. Keep the
-canonical files and runtime copies identical; both use the same `@/` imports for shared app
-pieces. Shared app pieces (UI primitives, `MediaViewer`, library/jobs/engine stores) stay in the
-app, not in individual module folders.
+The runtime app imports the frontend copies from
+`frontend/src/features/<nav-id>/`. Keep the canonical files and runtime copies
+identical; both use the same `@/` imports for shared app pieces. Shared pieces
+(UI primitives, `MediaViewer`, library/jobs/engine stores) stay in the app, not
+in individual module folders.
+
+`_template` uses the same layout with `backend.api:router`, a local SVG
+renderer, and a minimal `pack/options.json` for defaults/ranges. It is ignored
+by the capability registry because its folder starts with `_`; a copied folder
+with a real id becomes an installed capability.
+
+A module with more than one model family keeps one `T2I_main`-style GenModule
+and adds `pack/registry.json` plus one `pack/packs/<pack-id>/` folder per
+family. Each pack owns its JSON and its API-format workflows; the model selects
+the pack, and the module dispatches to that pack's composer. Missing custom
+nodes/model files still go in the module-root `requirements.json` and cover all
+packs. The app does not install them.
 
 ## Rules
 
-- A GenModule may import `app.common`, `app.connectors` (ComfyUI/Ollama) and the shared services
-  (library, jobs, settings) — never another GenModule.
-- Shared behaviour belongs in `app.common` or the shared services, not copied between modules.
-- The tracked pack is authoritative for that module's ranges/defaults and graph wiring. The
-  user-owned `data/model_catalog.json` supplies installed-file presence and metadata, never
-  module ranges.
-- The GUI and API/MCP callers run the same service validation. Never expose a client-only range
-  check that the REST path can bypass.
-- Jobs go through `app.jobs.service`. Deleting a job is a **soft delete** (`deleted_at`) behind
-  the module's delete endpoint, so audit data survives and normal reads hide it. Running/queued
-  jobs must be refused.
-- Files belong to the library. Save generated bytes with `library.add_bytes(...)`, return asset
-  ids in `job.resultIds`, and move files to `data/trash` through `library.trash_asset(...)`;
-  never unlink them from a module.
-- If the module needs engine content (custom nodes, model files), ship `requirements.json` next
-  to `manifest.json` — Settings → Engine content audits it against the user's ComfyUI install
-  (schema: `docs/COMFYUI_CONTENT.md` §2).
+- A GenModule may import `app.common`, `app.connectors` (ComfyUI/Ollama) and the
+  shared services (library, jobs, settings) — never another GenModule.
+- Shared behavior belongs in `app.common` or the shared services, not copied
+  between modules.
+- The tracked pack is authoritative for that module's ranges/defaults and graph
+  wiring. The user-owned `data/model_catalog.json` supplies installed-file
+  presence and metadata, never module ranges.
+- The GUI and API/MCP callers run the same service validation. Never expose a
+  client-only range check that the REST path can bypass.
+- Jobs go through `app.jobs.service`. Deleting a job is a **soft delete**
+  (`deleted_at`) behind the module's delete endpoint, so audit data survives and
+  normal reads hide it. Running/queued jobs must be refused.
+- Each module owns its history clearing through its own
+  `DELETE /api/<prefix>/jobs` route, optionally trashing that module's result
+  assets. Never clear module history through the generic `/api/jobs` routes.
+- Files belong to the library. Save generated bytes with `library.add_bytes(...)`,
+  return asset ids in `job.resultIds`, and move files to `data/trash` through
+  `library.trash_asset(...)`; never unlink them from a module.
+- The current library is image-only (`.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`,
+  `.gif`, `.svg`, 128 MB). Audio/video requires a host change to
+  `app/library/service.py`, the frontend `Asset` type/Gallery, and the viewer.
+- If the module needs engine content (custom nodes, model files), ship
+  `requirements.json` next to `manifest.json` — Settings → Engine content audits
+  it against the user's ComfyUI install (schema:
+  `docs/COMFYUI_CONTENT.md` §2).
 - Every module frontend persists its own form under a versioned key
-  (`genai.<module>.form.v1`), reconciles it with the current catalog, and provides per-panel
-  resets plus a global reset.
-- After a terminal job, sync the shared library and generic jobs caches so Gallery and Jobs see
-  the result immediately.
-- Add backend tests for validation, graph composition, result collection, cancel and deletion.
+  (`genai.<module>.form.v1`), reconciles it with the current catalog, and
+  provides per-panel resets plus a global reset.
+- After a terminal job, sync the shared library and generic jobs caches so
+  Gallery and Jobs see the result immediately.
+- Add backend tests for validation, graph composition, result collection,
+  cancel and deletion.
 
 ## Modules
 
 | Module | Status | Notes |
 | --- | --- | --- |
-| `T2I_main` | installed | Strict Text → Image; reference implementation. |
-| Others | planned/mock | Follow the T2I layout; do not copy its business rules blindly. |
+| `_template` | scaffold | Complete copy-paste starter; local SVG renderer; ignored by the capability registry. |
+| `T2I_main` | installed | Strict Text → Image; engine-backed reference implementation. |
+| Others | planned/mock | Follow the guide; do not copy T2I's business rules blindly. |
 
-See `docs/GENMODULE_GUIDE.md` before starting a new module.
+See [`docs/GENMODULE_GUIDE.md`](../../../docs/GENMODULE_GUIDE.md) before starting
+a new module. The starter's own contract is
+[`_template/README.md`](_template/README.md).

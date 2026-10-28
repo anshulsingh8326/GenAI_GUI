@@ -5,7 +5,7 @@
       "unet_name": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
       "weight_dtype": "default"
     },
-    "_meta": { "title": "Krea 2 Turbo (int8)" }
+    "_meta": { "title": "SNOFS-Krea2_Q8" }
   },
   "2": {
     "class_type": "CLIPLoader",

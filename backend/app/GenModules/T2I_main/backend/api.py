@@ -111,6 +111,15 @@ def list_jobs(limit: int = Query(default=80, ge=1, le=200)) -> list[dict]:
     return service.list_jobs(limit=limit)
 
 
+@router.delete("/jobs")
+@_mapped
+def clear_history(
+    delete_assets: bool = Query(default=False, alias="deleteAssets"),
+) -> dict:
+    """Clear only this module's chat history; optionally trash its result images."""
+    return service.clear_history(delete_assets=delete_assets)
+
+
 @router.get("/jobs/{job_id}")
 @_mapped
 def get_job(job_id: str) -> dict:

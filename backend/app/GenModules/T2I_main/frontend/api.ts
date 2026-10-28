@@ -12,6 +12,7 @@
 import type {
   T2IEnhanceRequest,
   T2IEnhanceResponse,
+  T2IClearHistoryResult,
   T2IJobRecord,
   T2IJobRequest,
   T2IJobDeleteResult,
@@ -176,6 +177,14 @@ export const t2iApi = {
   listJobs(limit = 80, signal?: AbortSignal): Promise<T2IJobRecord[]> {
     const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)))
     return request<T2IJobRecord[]>(`/jobs?limit=${safeLimit}`, { signal })
+  },
+
+  /** Clear this module's whole chat; optionally trash every result image. */
+  clearHistory(deleteAssets = false, signal?: AbortSignal): Promise<T2IClearHistoryResult> {
+    return request<T2IClearHistoryResult>(
+      `/jobs?deleteAssets=${deleteAssets ? 'true' : 'false'}`,
+      { method: 'DELETE', signal },
+    )
   },
 
   getJob(jobId: string, signal?: AbortSignal): Promise<T2IJobRecord> {

@@ -23,7 +23,7 @@ if /I "%~1"=="--launch" set "FROM_LAUNCH=1"
 set "PY=backend\.venv\Scripts\python.exe"
 set "PYTHON="
 set "UV="
-rem Keep the Python that uv downloads inside this project. It is never added
+rem Keep the Python that uv downloads inside this project.  It is never added
 rem to the system PATH; only backend\.venv uses it.
 set "UV_PYTHON_INSTALL_DIR=%CD%\tools\python"
 set "UV_PYTHON_PREFERENCE=only-managed"

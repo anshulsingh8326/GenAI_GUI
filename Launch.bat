@@ -32,7 +32,7 @@ if not exist "%PY%" (
 ) else (
   "%PY%" -c "import fastapi" >nul 2>nul
   if !errorlevel! NEQ 0 (
-    echo [warn] backend\.venv cannot run from this folder - Setup will repair it.
+    echo [warn] backend\.venv cannot run from this folder - Setup will repair it♥.
     set "SETUP_NEEDED=1"
   )
 )

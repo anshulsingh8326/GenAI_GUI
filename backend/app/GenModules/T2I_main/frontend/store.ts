@@ -16,6 +16,7 @@ import { useUiStore } from '@/stores/ui'
 import { T2IApiError, t2iApi } from './api'
 import type {
   T2ICatalog,
+  T2IClearHistoryResult,
   T2IEnhanceResponse,
   T2IJobDeleteResult,
   T2IJobParams,
@@ -25,6 +26,7 @@ import type {
   T2IModel,
   T2IProvider,
   T2IRange,
+  T2IRatio,
   T2IUpscaler,
   T2IWarning,
 } from './types'
@@ -53,7 +55,10 @@ export interface T2IFormState {
   enhanceEnabled: boolean
   enhanceProvider: T2IProvider
   enhanceModel: string
+  enhanceSystemPrompt: string
   fallbackToOriginal: boolean
+  /** Unload the Ollama enhancement model before ComfyUI starts (default on). */
+  unloadEnhanceModel: boolean
   approvedPrompt: string
   steps: number
   cfg: number
@@ -68,7 +73,15 @@ export interface T2IFormState {
   upscalerValue: number
 }
 
-export type T2IPanel = 'prompt' | 'output' | 'loras' | 'enhance' | 'sampling' | 'upscale' | 'all'
+export type T2IPanel =
+  | 'prompt'
+  | 'output'
+  | 'loras'
+  | 'enhance'
+  | 'sampling'
+  | 'upscale'
+  | 'advanced'
+  | 'all'
 
 interface PersistedForm {
   form: Record<string, unknown>
@@ -103,7 +116,9 @@ function defaultForm(): T2IFormState {
     enhanceEnabled: false,
     enhanceProvider: 'ollama',
     enhanceModel: '',
+    enhanceSystemPrompt: '',
     fallbackToOriginal: false,
+    unloadEnhanceModel: true,
     approvedPrompt: '',
     steps: 8,
     cfg: 1,
@@ -218,6 +233,82 @@ function nearestSize(value: number, values: number[]): number {
   )
 }
 
+// ComfyUI derives the short side from the requested long side, rounds it with
+// Python's round() (half-to-even), then aligns both sides to the pack step.
+// Keep the auto-fit preview in sync with that exact behavior.
+function roundLikePython(value: number): number {
+  const floor = Math.floor(value)
+  const fraction = value - floor
+  if (fraction === 0.5) return floor % 2 === 0 ? floor : floor + 1
+  return Math.round(value)
+}
+
+function alignDimension(value: number, range: T2IRange): number {
+  const step = Number(range.step)
+  return step > 0 ? roundLikePython(value / step) * step : value
+}
+
+function dimensionsFor(
+  ratio: T2IRatio,
+  longSide: number,
+  model: T2IModel,
+): { width: number; height: number } {
+  const landscape = ratio.w >= ratio.h
+  const longRatio = landscape ? ratio.w : ratio.h
+  const shortRatio = landscape ? ratio.h : ratio.w
+  const size = alignDimension(longSide, landscape ? model.ranges.width : model.ranges.height)
+  const shortSide = roundLikePython((size * shortRatio) / longRatio)
+  return {
+    width: alignDimension(landscape ? size : shortSide, model.ranges.width),
+    height: alignDimension(landscape ? shortSide : size, model.ranges.height),
+  }
+}
+
+function recommendedDelta(value: number, range: T2IRange): number {
+  const min = Number.isFinite(range.recommendedMin) ? range.recommendedMin : range.min
+  const max = Number.isFinite(range.recommendedMax) ? range.recommendedMax : range.max
+  return Math.max(0, min - value, value - max)
+}
+
+function recommendedPenalty(
+  dimensions: { width: number; height: number },
+  model: T2IModel,
+): number {
+  return (
+    recommendedDelta(dimensions.width, model.ranges.width) +
+    recommendedDelta(dimensions.height, model.ranges.height)
+  )
+}
+
+function fitSizeToRatio(
+  ratio: T2IRatio,
+  currentSize: number,
+  model: T2IModel | null,
+  values: number[],
+): number {
+  if (!model || !values.length) return currentSize
+  const current = nearestSize(currentSize, values)
+  if (recommendedPenalty(dimensionsFor(ratio, current, model), model) === 0) return current
+
+  let best = current
+  let bestPenalty = Number.POSITIVE_INFINITY
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const candidate of values) {
+    const penalty = recommendedPenalty(dimensionsFor(ratio, candidate, model), model)
+    const distance = Math.abs(candidate - current)
+    if (
+      penalty < bestPenalty ||
+      (penalty === bestPenalty && distance < bestDistance) ||
+      (penalty === bestPenalty && distance === bestDistance && candidate > best)
+    ) {
+      best = candidate
+      bestPenalty = penalty
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
 function loraCompatible(lora: T2ILora, model: T2IModel | null): boolean {
   if (!lora.t2i || lora.available === false || lora.present === false) return false
   if (!model) return true
@@ -263,7 +354,6 @@ export const useT2IStore = defineStore('t2i', () => {
   let catalogAbort: AbortController | null = null
   let enhanceAbort: AbortController | null = null
   let saveTimer: number | undefined
-  let persistReady = true
   const pollTimers = new Map<string, number>()
   const pollFailures = new Map<string, number>()
   // Jobs counted in the shared engine store. Deduplicated so a reattach after
@@ -286,20 +376,41 @@ export const useT2IStore = defineStore('t2i', () => {
       window.clearTimeout(saveTimer)
       saveTimer = undefined
     }
-    if (!persistReady) return
+    // A failed write is retried on the next change. Never disable autosave for
+    // the rest of the session, or a saved-looking form can revert on reload.
     try {
+      const savedForm = JSON.stringify(form)
+      const previous = localStorage.getItem(STORAGE_KEY)
+      if (previous) {
+        // Never echo an identical form back to storage. Without this guard,
+        // two tabs syncing through the `storage` event would keep re-writing
+        // each other and could resurrect a stale LoRA chain.
+        try {
+          const decoded: unknown = JSON.parse(previous)
+          if (isRecord(decoded)) {
+            const candidate = isRecord(decoded.form) ? decoded.form : decoded
+            if (JSON.stringify(candidate) === savedForm) {
+              lastSavedAt.value =
+                typeof decoded.savedAt === 'number' ? decoded.savedAt : lastSavedAt.value
+              storageError.value = ''
+              return
+            }
+          }
+        } catch {
+          // Fall through and overwrite a corrupt payload.
+        }
+      }
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
           version: STORAGE_VERSION,
           savedAt: Date.now(),
-          form,
+          form: JSON.parse(savedForm),
         }),
       )
       lastSavedAt.value = Date.now()
       storageError.value = ''
     } catch (err) {
-      persistReady = false
       storageError.value = (err as Error).message
     }
   }
@@ -326,12 +437,51 @@ export const useT2IStore = defineStore('t2i', () => {
       enhancePreview.value = null
     },
   )
+  // The custom enhancement system prompt is part of the same contract as the
+  // prompt: a preview created with the old brief must not be approved for the
+  // new one.
+  watch(
+    () => form.enhanceSystemPrompt,
+    () => {
+      if (enhancing.value) cancelEnhancement()
+      if (!form.approvedPrompt && !enhancePreview.value) return
+      form.approvedPrompt = ''
+      enhancePreview.value = null
+    },
+  )
   if (typeof window !== 'undefined') window.addEventListener('beforeunload', persistNow)
+
+  // Multi-tab safety: when another tab saves, adopt that form instead of
+  // leaving this tab with an old in-memory chain that would overwrite it on the
+  // next edit. `persistNow`'s equality guard prevents an endless echo.
+  function handleStorage(event: StorageEvent): void {
+    if (event.key !== STORAGE_KEY || !event.newValue) return
+    const saved = readPersisted()
+    if (!saved) return
+    const next = defaultForm()
+    mergePersisted(next, saved.form)
+    if (saveTimer !== undefined) {
+      window.clearTimeout(saveTimer)
+      saveTimer = undefined
+    }
+    Object.assign(form, next)
+    lastSavedAt.value = saved.savedAt ?? Date.now()
+    if (catalog.value) reconcile(catalog.value, false)
+  }
+  if (typeof window !== 'undefined') window.addEventListener('storage', handleStorage)
 
   const selectedModel = computed<T2IModel | null>(() => {
     const next = catalog.value
     if (!next) return null
     return next.models.find((model) => model.id === form.modelId) ?? next.models[0] ?? null
+  })
+
+  const dimensions = computed(() => {
+    const next = catalog.value
+    const model = selectedModel.value
+    const ratio = next?.ratios.find((item) => item.id === form.ratio)
+    if (!next || !ratio || !model) return null
+    return dimensionsFor(ratio, form.size, model)
   })
 
   const availableLoras = computed<T2ILora[]>(() => {
@@ -373,10 +523,13 @@ export const useT2IStore = defineStore('t2i', () => {
     return next.textModels.filter((model) => model.provider === form.enhanceProvider)
   })
 
-  const comfyReady = computed(() => catalog.value?.engine.comfyui.connected === true)
+  // Engine readiness is live state, not a catalog snapshot. The shared engine
+  // store polls /api/status; using it here means ComfyUI can come online while
+  // this page is open and Generate recovers without a browser reload.
+  const comfyReady = computed(() => engine.comfy.connected === true)
 
   const providerReady = computed(() => {
-    if (form.enhanceProvider === 'ollama') return catalog.value?.engine.ollama.connected === true
+    if (form.enhanceProvider === 'ollama') return engine.ollama.connected === true
     return comfyReady.value
   })
 
@@ -473,7 +626,9 @@ export const useT2IStore = defineStore('t2i', () => {
     form.enhanceEnabled = defaults.enabled
     form.enhanceProvider = defaults.provider
     form.enhanceModel = defaults.model || ''
+    form.enhanceSystemPrompt = ''
     form.fallbackToOriginal = defaults.fallbackToOriginal
+    form.unloadEnhanceModel = true
     form.approvedPrompt = ''
     enhancePreview.value = null
   }
@@ -727,6 +882,39 @@ export const useT2IStore = defineStore('t2i', () => {
     }
   }
 
+  // The T2I catalog carries more than connection booleans (installed Ollama
+  // text models, warnings, missing files). When the shared status poll sees an
+  // engine flip, refresh the catalog once so the controls catch up too.
+  let engineCatalogTimer: number | undefined
+  watch(
+    [() => engine.comfy.connected, () => engine.ollama.connected],
+    ([comfy, ollama]) => {
+      const snapshot = catalog.value?.engine
+      if (!snapshot) return
+      if (snapshot.comfyui.connected === comfy && snapshot.ollama.connected === ollama) return
+      if (engineCatalogTimer !== undefined) window.clearTimeout(engineCatalogTimer)
+      engineCatalogTimer = window.setTimeout(() => {
+        engineCatalogTimer = undefined
+        if (catalog.value) void loadCatalog()
+      }, 450)
+    },
+  )
+
+  function setRatio(value: string): void {
+    form.ratio = value
+    const next = catalog.value
+    const model = selectedModel.value
+    const ratio = next?.ratios.find((item) => item.id === value)
+    if (!next || !ratio || !model) return
+
+    const previousSize = form.size
+    const fittedSize = fitSizeToRatio(ratio, previousSize, model, next.size.values)
+    if (fittedSize === previousSize) return
+    form.size = fittedSize
+    const fitted = dimensionsFor(ratio, fittedSize, model)
+    ui.toast(`Fitted ${ratio.id} to ${fitted.width}x${fitted.height}px.`, 'info')
+  }
+
   function onModelChange(): void {
     const next = catalog.value
     if (!next) return
@@ -791,11 +979,21 @@ export const useT2IStore = defineStore('t2i', () => {
     const existing = form.loras.find((lora) => lora.id === id)
     if (existing) {
       existing.on = on
+      // Toggling a chain off is a deliberate, durable setting. Persist it now
+      // rather than waiting for the debounce: a reload or code rebuild can
+      // otherwise race the 180ms autosave and look like a reset to defaults.
+      persistNow()
       return
     }
     if (!on) return
     const item = availableLoras.value.find((lora) => lora.id === id)
     form.loras.push({ id, strength: item?.strength.default ?? null, on: true })
+    persistNow()
+  }
+
+  function setUnloadEnhanceModel(value: boolean): void {
+    form.unloadEnhanceModel = value
+    persistNow()
   }
 
   function setLoraStrength(id: string, value: number): void {
@@ -842,6 +1040,10 @@ export const useT2IStore = defineStore('t2i', () => {
         applyEnhanceDefaults(next)
         ui.toast('Prompt enhancement panel reset.', 'success')
         break
+      case 'advanced':
+        form.unloadEnhanceModel = true
+        ui.toast('Advanced settings reset.', 'success')
+        break
       case 'sampling':
         applySamplingDefaults(next)
         ui.toast('Sampling panel reset.', 'success')
@@ -884,7 +1086,12 @@ export const useT2IStore = defineStore('t2i', () => {
         enabled: form.enhanceEnabled,
         provider: form.enhanceProvider,
         model: form.enhanceEnabled && form.enhanceModel ? form.enhanceModel : undefined,
+        systemPrompt:
+          form.enhanceEnabled && form.enhanceSystemPrompt.trim()
+            ? form.enhanceSystemPrompt.trim()
+            : undefined,
         fallbackToOriginal: form.fallbackToOriginal,
+        unloadAfter: form.unloadEnhanceModel,
       },
       enhancedPrompt: form.enhanceEnabled ? form.approvedPrompt.trim() || undefined : undefined,
       advanced: {
@@ -1075,6 +1282,28 @@ export const useT2IStore = defineStore('t2i', () => {
     return result
   }
 
+  async function clearHistory(deleteAssets: boolean): Promise<T2IClearHistoryResult> {
+    const result = await t2iApi.clearHistory(deleteAssets)
+    const cleared = new Set(result.jobIds)
+    jobs.value = jobs.value.filter((job) => !cleared.has(job.id))
+    for (const jobId of cleared) {
+      stopPolling(jobId)
+      releaseJob(jobId)
+    }
+    jobSyncError.value = ''
+    // Always resync: even "keep media" can reveal that some results were
+    // already removed from the Library, and the Gallery must stay authoritative.
+    await library.syncFromBackend()
+    void genericJobs.syncFromBackend()
+    ui.toast(
+      deleteAssets
+        ? `Cleared ${result.deleted} chat item${result.deleted === 1 ? '' : 's'}; ${result.assetsTrashed.length} image${result.assetsTrashed.length === 1 ? '' : 's'} moved to trash.`
+        : `Cleared ${result.deleted} chat item${result.deleted === 1 ? '' : 's'}; images stay in the Library.`,
+      'success',
+    )
+    return result
+  }
+
   function applyJobSettings(job: T2IJobRecord): void {
     const next = catalog.value
     const params: Partial<T2IJobParams> = job.params ?? {}
@@ -1095,8 +1324,10 @@ export const useT2IStore = defineStore('t2i', () => {
     form.enhanceEnabled = params.enhance?.enabled ?? false
     form.enhanceProvider = params.enhance?.provider ?? form.enhanceProvider
     form.enhanceModel = params.enhance?.model ?? ''
+    form.enhanceSystemPrompt = params.enhance?.systemPrompt ?? ''
     form.fallbackToOriginal =
       params.enhance?.fallbackToOriginal ?? form.fallbackToOriginal
+    form.unloadEnhanceModel = params.enhance?.unloadAfter ?? true
     form.approvedPrompt = ''
     form.steps = params.steps ?? form.steps
     form.cfg = params.cfg ?? form.cfg
@@ -1130,6 +1361,7 @@ export const useT2IStore = defineStore('t2i', () => {
       actionError.value = 'Write a prompt before enhancing it.'
       return
     }
+    const systemPrompt = form.enhanceSystemPrompt.trim()
     enhanceAbort?.abort()
     enhanceAbort = new AbortController()
     enhancing.value = true
@@ -1141,13 +1373,20 @@ export const useT2IStore = defineStore('t2i', () => {
           prompt,
           provider: form.enhanceProvider,
           model: form.enhanceModel || undefined,
-          maxLength: catalog.value.limits.promptMaxChars,
+          systemPrompt: systemPrompt || undefined,
+          unloadAfter: form.unloadEnhanceModel,
         },
         enhanceAbort.signal,
       )
       // The prompt may have changed (or enhancement may have been switched
       // off) while the provider was working; never show a stale rewrite.
-      if (form.prompt.trim() !== prompt || !form.enhanceEnabled) return
+      if (
+        form.prompt.trim() !== prompt ||
+        form.enhanceSystemPrompt.trim() !== systemPrompt ||
+        !form.enhanceEnabled
+      ) {
+        return
+      }
       enhancePreview.value = next
       ui.toast(`Prompt enhanced with ${next.model}.`, 'success')
     } catch (err) {
@@ -1197,6 +1436,7 @@ export const useT2IStore = defineStore('t2i', () => {
     storageError,
     // derived
     selectedModel,
+    dimensions,
     availableLoras,
     upscaler,
     upscalerRange,
@@ -1217,11 +1457,13 @@ export const useT2IStore = defineStore('t2i', () => {
     flushPersist,
     errorText,
     // actions
+    setRatio,
     onModelChange,
     onProviderChange,
     onUpscalerChange,
     setUpscalerEnabled,
     setEnhanceEnabled,
+    setUnloadEnhanceModel,
     isLoraOn,
     loraStrength,
     setLoraOn,
@@ -1230,6 +1472,7 @@ export const useT2IStore = defineStore('t2i', () => {
     generate,
     cancelJob,
     deleteJob,
+    clearHistory,
     applyJobSettings,
     useJobSeed,
     enhanceNow,

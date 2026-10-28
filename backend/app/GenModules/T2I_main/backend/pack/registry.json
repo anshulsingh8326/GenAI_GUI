@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "defaultPack": "krea2",
+  "packs": [
+    {
+      "id": "krea2",
+      "label": "Krea 2",
+      "path": "packs/krea2"
+    }
+  ]
+}

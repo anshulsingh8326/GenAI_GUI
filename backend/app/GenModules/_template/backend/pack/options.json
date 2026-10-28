@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "defaults": {
+    "prompt": "",
+    "accent": "lavender",
+    "width": 1024,
+    "height": 1024,
+    "batch": 1,
+    "lockSeed": false
+  },
+  "size": {
+    "label": "Size",
+    "min": 256,
+    "max": 2048,
+    "step": 64,
+    "values": [256, 512, 768, 1024, 1280, 1536, 2048]
+  },
+  "batch": {
+    "label": "Batch",
+    "min": 1,
+    "max": 4,
+    "step": 1
+  },
+  "limits": {
+    "promptMaxChars": 2000,
+    "pollIntervalSeconds": 1
+  },
+  "accents": [
+    { "id": "lavender", "label": "Lavender" },
+    { "id": "mint", "label": "Mint" },
+    { "id": "peach", "label": "Peach" },
+    { "id": "sky", "label": "Sky" }
+  ]
+}

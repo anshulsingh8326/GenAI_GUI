@@ -41,13 +41,22 @@ class OllamaClient:
         system: str = "",
         options: dict | None = None,
         timeout: float = 240.0,
+        think: bool | None = None,
     ) -> dict:
-        """Non-streaming POST /api/generate. Returns the full Ollama response."""
+        """Non-streaming POST /api/generate. Returns the full Ollama response.
+
+        `think=False` suppresses a reasoning model's thinking trace so callers
+        that need the final answer (for example prompt enhancement) do not get
+        an empty `response` after the token budget is spent on `thinking`.
+        Older servers and non-thinking models ignore the field.
+        """
         payload: dict = {"model": model, "prompt": prompt, "stream": False}
         if system:
             payload["system"] = system
         if options:
             payload["options"] = options
+        if think is not None:
+            payload["think"] = think
         return (await self._request("POST", "/api/generate", json=payload, timeout=timeout)).json()
 
     async def unload(self, name: str) -> None:

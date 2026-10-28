@@ -28,6 +28,7 @@ import { useUiStore } from '@/stores/ui'
 import type { MediaViewerItem } from '@/components/media/types'
 import MediaViewer from '@/components/media/MediaViewer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppPopover from '@/components/ui/AppPopover.vue'
 import T2IGenerationCard from './T2IGenerationCard.vue'
 import T2ISettingsPanel from './T2ISettingsPanel.vue'
 import type { T2IJobRecord } from './types'
@@ -62,6 +63,8 @@ const viewerIndex = ref(0)
 const viewerItems = ref<MediaViewerItem[]>([])
 const viewerTitle = ref('Media viewer')
 const viewerJobId = ref('')
+const clearMenuOpen = ref(false)
+const clearing = ref(false)
 
 const promptLimit = computed(() => catalog.value?.limits.promptMaxChars ?? 2000)
 const visibleWarnings = computed(() => {
@@ -183,6 +186,25 @@ async function deleteJob(job: T2IJobRecord, deleteAssets: boolean): Promise<void
   }
 }
 
+async function clearHistory(deleteAssets: boolean): Promise<void> {
+  clearMenuOpen.value = false
+  if (!jobs.value.length) return
+  const message = deleteAssets
+    ? 'Clear all T2I_main chat messages and move all of their result images to the library trash? This only affects T2I_main.'
+    : 'Clear all T2I_main chat messages? Their result images stay in the Library.'
+  if (!window.confirm(message)) return
+  clearing.value = true
+  try {
+    viewerOpen.value = false
+    viewerJobId.value = ''
+    await store.clearHistory(deleteAssets)
+  } catch (err) {
+    ui.toast(store.errorText(err), 'error')
+  } finally {
+    clearing.value = false
+  }
+}
+
 function isViewerFavorite(item: MediaViewerItem): boolean {
   return library.byId(item.id)?.favorite ?? false
 }
@@ -194,22 +216,6 @@ async function toggleViewerFavorite(item: MediaViewerItem): Promise<void> {
     return
   }
   await library.toggleFavorite(item.id)
-}
-
-async function deleteViewerAsset(item: MediaViewerItem): Promise<void> {
-  if (!window.confirm('Move this image to the library trash? It can be restored from data/trash.')) {
-    return
-  }
-  const removed = await library.trash(item.id)
-  if (!removed) return
-  viewerItems.value = viewerItems.value.filter((entry) => entry.id !== item.id)
-  if (!viewerItems.value.length) {
-    viewerOpen.value = false
-    return
-  }
-  if (viewerIndex.value >= viewerItems.value.length) {
-    viewerIndex.value = viewerItems.value.length - 1
-  }
 }
 
 watch(
@@ -267,6 +273,63 @@ onBeforeUnmount(() => {
           <Images class="h-3.5 w-3.5" />
           Gallery
         </RouterLink>
+
+        <AppPopover v-model="clearMenuOpen" align="right" width="18rem">
+          <template #trigger>
+            <button
+              type="button"
+              class="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-muted transition-colors hover:border-danger/40 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="!jobs.length || clearing"
+              :title="jobs.length ? 'Clear this module chat' : 'No chat history to clear'"
+              @click="clearMenuOpen = !clearMenuOpen"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+              {{ clearing ? 'Clearing…' : 'Clear' }}
+            </button>
+          </template>
+
+          <div class="space-y-1">
+            <p class="px-2 text-[11px] font-semibold">Clear T2I_main chat</p>
+            <p class="px-2 pb-1 text-[10px] leading-snug text-muted">
+              Only this module. Other GenModules and Library favorites are untouched.
+            </p>
+            <p
+              v-if="store.busy"
+              class="mx-2 mb-1 rounded-lg border border-warn/30 bg-warn/10 px-2 py-1.5 text-[10px] leading-snug text-warn"
+            >
+              Cancel the active generation first.
+            </p>
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="store.busy"
+              @click="clearHistory(false)"
+            >
+              <Trash2 class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+              <span class="min-w-0">
+                <span class="block text-xs font-medium text-text">Clear chat</span>
+                <span class="block text-[10px] leading-snug text-muted">
+                  Remove all chat messages. Keep every image in the Library.
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="store.busy"
+              @click="clearHistory(true)"
+            >
+              <Trash2 class="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
+              <span class="min-w-0">
+                <span class="block text-xs font-medium text-danger">Clear chat + media</span>
+                <span class="block text-[10px] leading-snug text-muted">
+                  Move all of this module's result images to the library trash (recoverable).
+                </span>
+              </span>
+            </button>
+          </div>
+        </AppPopover>
+
         <button
           type="button"
           class="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 text-muted transition-colors hover:border-accent/40 hover:text-text"
@@ -533,15 +596,6 @@ onBeforeUnmount(() => {
             @click="toggleViewerFavorite(item)"
           >
             <Star class="h-4 w-4" :class="isViewerFavorite(item) ? 'fill-current text-warn' : ''" />
-          </button>
-          <button
-            type="button"
-            class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            title="Move image to trash"
-            aria-label="Move image to trash"
-            @click="deleteViewerAsset(item)"
-          >
-            <Trash2 class="h-4 w-4" />
           </button>
         </template>
       </template>

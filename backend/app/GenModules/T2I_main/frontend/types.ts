@@ -358,6 +358,8 @@ export interface T2IEnhanceSelection {
   model?: string | null
   systemPrompt?: string | null
   fallbackToOriginal?: boolean
+  /** Unload an Ollama text model after the rewrite (default true). */
+  unloadAfter?: boolean
 }
 
 export interface T2IJobRequest {
@@ -472,6 +474,8 @@ export interface T2IEnhanceRequest {
   systemPrompt?: string | null
   maxLength?: number | null
   temperature?: number | null
+  /** Free the Ollama text model once the rewrite is returned. */
+  unloadAfter?: boolean
 }
 
 export interface T2IEnhanceResponse {
@@ -480,6 +484,10 @@ export interface T2IEnhanceResponse {
   provider: T2IProvider
   model: string
   durationMs: number
+  /** True when the Ollama text model was released after the rewrite. */
+  unloaded?: boolean
+  /** Best-effort unload failure; the rewrite still succeeded. */
+  unloadError?: string | null
 }
 
 export interface T2IResolvedEnhance extends T2IEnhanceSelection {
@@ -490,7 +498,9 @@ export interface T2IResolvedEnhance extends T2IEnhanceSelection {
   modelExplicit?: boolean
   systemPrompt: string
   fallbackToOriginal: boolean
+  unloadAfter: boolean
   error?: string
+  unloadError?: string
 }
 
 // -- jobs --------------------------------------------------------------------
@@ -597,6 +607,14 @@ export interface T2IJobDeleteResult {
   /** Asset ids that were moved to data/trash. */
   assetsTrashed: string[]
   /** Result ids that were already missing (for example, deleted from the Library). */
+  assetsMissing: string[]
+}
+
+export interface T2IClearHistoryResult {
+  /** Number of jobs soft-deleted from this module's chat. */
+  deleted: number
+  jobIds: string[]
+  assetsTrashed: string[]
   assetsMissing: string[]
 }
 

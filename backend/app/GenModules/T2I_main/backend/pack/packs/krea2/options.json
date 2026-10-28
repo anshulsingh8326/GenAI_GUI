@@ -4,6 +4,7 @@
     "id": "krea2-t2i-v1",
     "label": "Krea 2 T2I (Freeze v8)",
     "workflow": "workflows/krea2_t2i.api.json",
+    "composer": "krea2",
     "engine": "comfyui",
     "description": "Strict Text -> Image: Krea 2 Turbo, Qwen3-VL text encoder, qwen_image VAE, optional LoRA chain, optional latent refine and optional 4x-UltraSharp."
   },
@@ -51,15 +52,15 @@
     ]
   },
   "ratios": [
-    { "id": "1:1", "label": "1:1", "w": 1, "h": 1 },
-    { "id": "4:5", "label": "4:5", "w": 4, "h": 5 },
-    { "id": "3:4", "label": "3:4", "w": 3, "h": 4 },
-    { "id": "2:3", "label": "2:3", "w": 2, "h": 3 },
-    { "id": "9:16", "label": "9:16", "w": 9, "h": 16 },
-    { "id": "5:4", "label": "5:4", "w": 5, "h": 4 },
-    { "id": "4:3", "label": "4:3", "w": 4, "h": 3 },
-    { "id": "3:2", "label": "3:2", "w": 3, "h": 2 },
-    { "id": "16:9", "label": "16:9", "w": 16, "h": 9 }
+    { "id": "1:1", "label": "1:1 - Square", "w": 1, "h": 1 },
+    { "id": "4:5", "label": "4:5 - Portrait", "w": 4, "h": 5 },
+    { "id": "3:4", "label": "3:4 - Portrait", "w": 3, "h": 4 },
+    { "id": "2:3", "label": "2:3 - Portrait", "w": 2, "h": 3 },
+    { "id": "9:16", "label": "9:16 - Portrait", "w": 9, "h": 16 },
+    { "id": "5:4", "label": "5:4 - Landscape", "w": 5, "h": 4 },
+    { "id": "4:3", "label": "4:3 - Landscape", "w": 4, "h": 3 },
+    { "id": "3:2", "label": "3:2 - Landscape", "w": 3, "h": 2 },
+    { "id": "16:9", "label": "16:9 - Widescreen", "w": 16, "h": 9 }
   ],
   "size": {
     "label": "Size",
