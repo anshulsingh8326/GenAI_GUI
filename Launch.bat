@@ -15,9 +15,9 @@ rem    3. runs the backend IN THIS WINDOW - it serves the built frontend - and
 rem       opens the app in your browser once the backend is up.
 rem
 rem  Everything lives inside this folder: backend\.venv, frontend\node_modules,
-rem  frontend\dist, data\. The only external tools are uv (or Python 3.11+),
-rem  Git for ComfyUI node installs, and Node.js for rebuilding the frontend.
-rem  See tools\README.md and Setup.bat.
+rem  frontend\dist, data\. Setup can also download portable uv, Python and
+rem  Node.js into tools\. The only system install is Git, needed for ComfyUI
+rem  node installs. See tools\README.md and Setup.bat.
 rem
 rem  To stop the app: press Ctrl+C here (or just close this window).
 rem  Backend logs stream right here in this console.
@@ -27,7 +27,15 @@ set "PY=backend\.venv\Scripts\python.exe"
 set "URL=http://127.0.0.1:8766"
 set "SETUP_NEEDED="
 
-if not exist "%PY%" set "SETUP_NEEDED=1"
+if not exist "%PY%" (
+  set "SETUP_NEEDED=1"
+) else (
+  "%PY%" -c "import fastapi" >nul 2>nul
+  if !errorlevel! NEQ 0 (
+    echo [warn] backend\.venv cannot run from this folder - Setup will repair it.
+    set "SETUP_NEEDED=1"
+  )
+)
 if not exist "frontend\dist\index.html" set "SETUP_NEEDED=1"
 if not defined SETUP_NEEDED (
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\needs-frontend-build.ps1"

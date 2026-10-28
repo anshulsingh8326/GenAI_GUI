@@ -13,11 +13,13 @@ the backend serves the built GUI and owns all state (settings, jobs, assets). An
 ## Quick start
 
 1. Double-click **`Launch.bat`**.
-2. On first run it calls **`Setup.bat`**: creates `backend\.venv` with `uv`
-   (or Python 3.11+), checks **Git** (required for ComfyUI node installs, no
-   ZIP fallback), and builds `frontend\dist` when needed. Missing tools are
-   only installed after a Y/N prompt; Node.js is only needed for a frontend
-   build. See `tools\README.md` for the included portable `uv.exe` option.
+2. On first run it calls **`Setup.bat`**: creates `backend\.venv` with `uv`,
+   which installs Python into `tools\python` (project-local, never on `PATH`),
+   checks **Git** (required for ComfyUI node installs, no ZIP fallback), and
+   builds `frontend\dist` when needed. If npm is missing, Setup can download
+   portable Node.js into `tools\node`. Missing tools are only installed after a
+   Y/N prompt; Node.js is only needed for a frontend build. See
+   `tools\README.md`.
 3. It rebuilds the Vue frontend automatically when sources/configs are newer
    than `frontend\dist`, then runs the backend **in the same console window**
    and opens <http://127.0.0.1:8766> in your browser.
@@ -105,8 +107,8 @@ production (that is what `Launch.bat` uses).
 
 `backend/` FastAPI app + MCP server · `frontend/` Vue 3 SPA (one folder per module in
 `src/features/`) · `data/` runtime state (settings.json, SQLite, library, trash - never
-committed) · `docs/` plans and guidelines · `tools/` optional portable `uv.exe` ·
-`Setup.bat` / `Launch.bat` bootstrap and run the app.
+committed) · `docs/` plans and guidelines · `tools/` optional portable uv, Python and
+Node.js · `Setup.bat` / `Launch.bat` bootstrap and run the app.
 
 Full structure: `docs/PLAN.md` §7.
 
@@ -123,4 +125,4 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/GENMODULE_GUIDE.md` | reusable GenModule architecture, packs, jobs, library and media viewer |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
-| `tools/README.md` | setup checks, portable `uv.exe`, frontend rebuild rules |
+| `tools/README.md` | setup checks, portable uv/Python/Node, frontend rebuild rules |

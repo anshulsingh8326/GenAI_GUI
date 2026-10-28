@@ -10,9 +10,10 @@ rem  Checks/creates the local backend environment, checks Git (required for
 rem  ComfyUI node installs), and builds the Vue frontend when its sources are
 rem  newer than frontend\dist.
 rem
-rem  Missing tools are only installed after a Y/N prompt. Portable uv is
-rem  downloaded into tools\uv.exe; Git/Node/Python use winget when available,
-rem  otherwise the official download page is opened.
+rem  Missing tools are only installed after a Y/N prompt. Portable uv
+rem  (tools\uv.exe) and Node.js (tools\node) are downloaded on consent; uv
+rem  installs Python into tools\python. Git uses winget when available,
+rem  otherwise the official download page is offered.
 rem
 rem  Launch.bat calls this with --launch on first run / when a build is needed.
 rem ============================================================================
@@ -22,6 +23,11 @@ if /I "%~1"=="--launch" set "FROM_LAUNCH=1"
 set "PY=backend\.venv\Scripts\python.exe"
 set "PYTHON="
 set "UV="
+rem Keep the Python that uv downloads inside this project. It is never added
+rem to the system PATH; only backend\.venv uses it.
+set "UV_PYTHON_INSTALL_DIR=%CD%\tools\python"
+set "UV_PYTHON_PREFERENCE=only-managed"
+set "UV_LINK_MODE=copy"
 
 echo.
 echo [setup] GenAI GUI prerequisites
@@ -40,11 +46,20 @@ exit /b 0
 
 rem ------------------------------------------------------------ backend env --
 :ensure_backend
+set "BACKEND_REPAIR="
 if exist "%PY%" (
-  echo [ok] backend\.venv
-  exit /b 0
+  "%PY%" -c "import fastapi" >nul 2>nul
+  if !errorlevel! EQU 0 (
+    echo [ok] backend\.venv
+    exit /b 0
+  )
+  set "BACKEND_REPAIR=1"
 )
-echo [setup] backend\.venv is missing - creating it...
+if defined BACKEND_REPAIR (
+  echo [warn] backend\.venv cannot run from this folder - repairing it...
+) else (
+  echo [setup] backend\.venv is missing - creating it...
+)
 if exist "tools\uv.exe" set "UV=%CD%\tools\uv.exe"
 if not defined UV (
   where uv >nul 2>nul
@@ -54,25 +69,35 @@ if not defined UV (
   echo.
   echo       uv was not found. It is a single portable executable, so it can
   echo       create the project venv and download Python without an installer.
+  echo       Manual install: https://docs.astral.sh/uv/getting-started/installation/
   choice /C YN /M "Download portable uv into tools\ now"
   if !errorlevel! EQU 1 (
     powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\download-uv.ps1"
     if !errorlevel! NEQ 0 (
       echo [error] uv download failed.
+      echo         Download it manually from:
+      echo         https://docs.astral.sh/uv/getting-started/installation/
       exit /b 1
     )
     if exist "tools\uv.exe" set "UV=%CD%\tools\uv.exe"
   )
 )
 if defined UV (
+  echo [setup] Installing a project-local Python with uv...
+  "!UV!" python install 3.13 --no-bin --no-registry
+  if !errorlevel! NEQ 0 exit /b 1
   echo [setup] Syncing backend dependencies with uv...
-  "!UV!" sync --directory backend --link-mode copy
+  "!UV!" sync --directory backend
   if !errorlevel! NEQ 0 exit /b 1
 ) else (
   call :ensure_python
   if errorlevel 1 exit /b 1
   echo [setup] uv not available - using Python + pip as a fallback...
-  !PYTHON! -m venv backend\.venv
+  if defined BACKEND_REPAIR (
+    !PYTHON! -m venv --clear backend\.venv
+  ) else (
+    !PYTHON! -m venv backend\.venv
+  )
   if !errorlevel! NEQ 0 exit /b 1
   "%PY%" -m pip install --upgrade pip
   rem keep this list in sync with backend\pyproject.toml
@@ -81,6 +106,11 @@ if defined UV (
 )
 if not exist "%PY%" (
   echo [error] backend\.venv was not created.
+  exit /b 1
+)
+"%PY%" -c "import fastapi" >nul 2>nul
+if !errorlevel! NEQ 0 (
+  echo [error] backend\.venv was created but cannot import its dependencies.
   exit /b 1
 )
 echo [ok] backend\.venv
@@ -99,17 +129,26 @@ if !errorlevel! EQU 0 (
   exit /b 0
 )
 echo.
-echo       Python was not found. uv is the recommended route, but a system
-echo       Python 3.11+ also works as a fallback.
+echo [missing] Python 3.11+ was not found.
+echo           uv is the recommended route because it keeps Python inside
+echo           tools\python. A system Python 3.11+ is only a fallback.
+echo           Download: https://www.python.org/downloads/windows/
 where winget >nul 2>nul
 if !errorlevel! NEQ 0 (
-  echo       winget is not available. Install Python from https://www.python.org/downloads/
-  echo       and run Setup.bat again.
+  echo.
+  echo           winget is not available on this PC.
+  choice /C YN /M "Open the Python download page now"
+  if !errorlevel! EQU 1 start "" "https://www.python.org/downloads/windows/"
+  echo [error] Install Python 3.11+ and run Setup.bat again.
   exit /b 1
 )
 choice /C YN /M "Install Python 3.13 with winget now"
 if !errorlevel! NEQ 1 (
-  echo [warn] Python is required for the fallback. Install it and run Setup.bat again.
+  echo.
+  echo [warn] Python is required for the fallback. Install it manually:
+  echo        https://www.python.org/downloads/windows/
+  choice /C YN /M "Open the Python download page now"
+  if !errorlevel! EQU 1 start "" "https://www.python.org/downloads/windows/"
   exit /b 1
 )
 call :winget_install Python.Python.3.13
@@ -125,7 +164,8 @@ if !errorlevel! EQU 0 (
   set "PYTHON=py -3"
   exit /b 0
 )
-echo [warn] Python was installed but is not on PATH yet. Restart the terminal and run Setup.bat again.
+echo [warn] Python was installed but is not visible in this window yet.
+echo        Restart Setup/Launch and run Setup.bat again.
 exit /b 1
 
 rem ------------------------------------------------------------------- git --
@@ -136,28 +176,35 @@ if !errorlevel! EQU 0 (
   exit /b 0
 )
 echo.
-echo [warn] Git was not found. Git is required for ComfyUI node installs/updates.
-echo        The app itself can still start, but node installs stay disabled.
+echo [missing] Git was not found.
+echo           Git is required for ComfyUI node installs and updates.
+echo           Download: https://git-scm.com/download/win
+echo           The app itself can still start, but node install buttons stay disabled.
 where winget >nul 2>nul
-if !errorlevel! NEQ 0 (
-  echo        winget is not available - open the Git download page:
-  echo        https://git-scm.com/download/win
-  start "" "https://git-scm.com/download/win"
-  exit /b 0
-)
+if !errorlevel! NEQ 0 goto :git_offer_download
 choice /C YN /M "Install Git for Windows with winget now"
-if !errorlevel! NEQ 1 (
-  echo [warn] Install Git later from https://git-scm.com/download/win
+if !errorlevel! EQU 1 (
+  call :winget_install Git.Git
+  if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;!PATH!"
+  where git >nul 2>nul
+  if !errorlevel! EQU 0 (
+    echo [ok] Git
+    exit /b 0
+  )
+  echo [warn] Git was installed but is not visible in this window yet.
+  echo        Restart Setup/Launch after the installer completes.
   exit /b 0
 )
-call :winget_install Git.Git
-if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;!PATH!"
-where git >nul 2>nul
-if !errorlevel! EQU 0 (
-  echo [ok] Git
-  exit /b 0
+:git_offer_download
+echo.
+choice /C YN /M "Open the Git download page now"
+if !errorlevel! EQU 1 (
+  start "" "https://git-scm.com/download/win"
+  echo [setup] Opened the Git download page. Install Git, then restart Setup/Launch.
+) else (
+  echo [setup] Skipped. Install Git later from the link above.
 )
-echo [warn] Git was installed but is not on PATH yet. Restart the terminal and run Setup.bat again.
+echo [warn] Continuing without Git - node installs stay disabled until it is installed.
 exit /b 0
 
 rem --------------------------------------------------------------- frontend --
@@ -173,33 +220,63 @@ if not defined BUILD_NEEDED (
   exit /b 0
 )
 echo [setup] frontend\dist is missing or older than the Vue sources...
+if exist "tools\node\npm.cmd" set "PATH=%CD%\tools\node;!PATH!"
 where npm >nul 2>nul
 if !errorlevel! NEQ 0 (
   echo.
   if exist "frontend\dist\index.html" (
     echo [warn] Node.js/npm was not found. The existing frontend build will be used.
+    echo        Download: https://nodejs.org/en/download
     echo        Install Node.js and run Setup.bat to rebuild after Vue source changes.
+    if not defined FROM_LAUNCH (
+      choice /C YN /M "Open the Node.js download page now"
+      if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
+    )
     exit /b 0
   )
-  echo       Node.js/npm is required for the first frontend build.
+  echo [missing] Node.js/npm was not found.
+  echo           Node.js is required for the first frontend build.
+  echo           Portable option: download Node.js into tools\node - no installer.
+  echo           Download: https://nodejs.org/en/download
+  choice /C YN /M "Download portable Node.js into tools\node now"
+  if !errorlevel! EQU 1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\download-node.ps1"
+    if !errorlevel! EQU 0 (
+      if exist "tools\node\npm.cmd" set "PATH=%CD%\tools\node;!PATH!"
+      where npm >nul 2>nul
+      if !errorlevel! EQU 0 goto :frontend_ready
+    )
+    echo [warn] Portable Node.js is not ready; checking winget next.
+  )
   where winget >nul 2>nul
   if !errorlevel! NEQ 0 (
-    echo       winget is not available. Install Node.js from https://nodejs.org/ and run Setup.bat again.
+    echo.
+    echo           winget is not available on this PC.
+    choice /C YN /M "Open the Node.js download page now"
+    if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
+    echo [error] Install Node.js and run Setup.bat again.
     exit /b 1
   )
   choice /C YN /M "Install Node.js LTS with winget now"
-  if !errorlevel! NEQ 1 (
-    echo [error] Node.js is required to build the frontend.
-    exit /b 1
-  )
-  call :winget_install OpenJS.NodeJS.LTS
-  if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;!PATH!"
-  where npm >nul 2>nul
-  if !errorlevel! NEQ 0 (
-    echo [warn] Node.js was installed but npm is not on PATH yet. Restart the terminal and run Setup.bat again.
+  if !errorlevel! EQU 1 (
+    call :winget_install OpenJS.NodeJS.LTS
+    if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;!PATH!"
+    where npm >nul 2>nul
+    if !errorlevel! NEQ 0 (
+      echo [warn] Node.js was installed but npm is not visible in this window yet.
+      echo        Restart Setup/Launch and run Setup.bat again.
+      exit /b 1
+    )
+  ) else (
+    echo.
+    echo [warn] Node.js is required to build the frontend.
+    echo        https://nodejs.org/en/download
+    choice /C YN /M "Open the Node.js download page now"
+    if !errorlevel! EQU 1 start "" "https://nodejs.org/en/download"
     exit /b 1
   )
 )
+:frontend_ready
 pushd frontend
 if not exist node_modules (
   if exist package-lock.json (call npm ci) else (call npm install)

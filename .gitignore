@@ -16,6 +16,8 @@ frontend/dist/
 
 # portable tools downloaded by Setup.bat
 tools/uv.exe
+tools/python/
+tools/node/
 
 # logs & env
 *.log

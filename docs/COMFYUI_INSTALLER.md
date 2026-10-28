@@ -28,7 +28,9 @@ that a shipped manifest already contains; it can never send an arbitrary reposit
   accepted; the GUI cannot supply paths.
 - Git is required for every clone/update. Planning fails with HTTP 400 when `git` is not on
   `PATH`; `inspect` exposes `gitAvailable` so the GUI can warn before the user clicks
-  Install. `Setup.bat` offers to install Git for Windows.
+  Install. `Setup.bat` offers `winget install Git.Git` when winget is available;
+  otherwise it shows the official download link and asks before opening it. The
+  app can still start without Git, but node installs stay disabled.
 - Package-style installs use the `pip` field (for example `comfyui-manager>=4.2,<5`). For
   `comfyui_manager`, an official `comfy/manager_requirements.txt` inside the ComfyUI folder
   takes precedence, so new ComfyUI releases install their own pinned Manager version.
