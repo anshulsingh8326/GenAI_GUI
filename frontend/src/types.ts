@@ -376,6 +376,10 @@ export interface ComfyInspect {
   extraModelPathsFile: boolean
   /** ComfyUI source folders derived from the launcher (only when no folder is configured). */
   suggestions: string[]
+  /** One-click correction when the saved folder is a launcher, parent, or subfolder. */
+  suggestedFolder: string | null
+  /** Git is required for clone/update actions; package installs still work without it. */
+  gitAvailable: boolean
   error: string | null
 }
 

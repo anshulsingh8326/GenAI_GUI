@@ -79,6 +79,14 @@ const folderReport = computed(() => {
 })
 
 const suggestion = computed(() => (folderSet.value ? '' : (content.inspect?.suggestions[0] ?? '')))
+const suggestedCorrection = computed(() => (folderSet.value ? (folderReport.value?.suggestedFolder ?? '') : ''))
+
+async function applyFolder(path: string) {
+  if (!path) return
+  settings.comfyuiFolder = path
+  await settings.flushSettings()
+  await content.refresh()
+}
 
 const folderSummary = computed(() => {
   const report = folderReport.value
@@ -248,6 +256,10 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
         <template v-else-if="folderReport?.error">
           <StatusDot state="off" />
           <span class="text-warn">{{ folderReport.error }}</span>
+          <template v-if="suggestedCorrection">
+            <code class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px]">{{ suggestedCorrection }}</code>
+            <AppButton variant="ghost" @click="applyFolder(suggestedCorrection)">Use this folder</AppButton>
+          </template>
         </template>
         <template v-else>
           <LoaderCircle class="h-3 w-3 animate-spin text-muted" />
@@ -257,7 +269,7 @@ function profileOptions(kind: 'comfyui' | 'ollama') {
       <div v-else-if="suggestion" class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
         <span class="text-muted">Detected from your launcher:</span>
         <code class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px]">{{ suggestion }}</code>
-        <AppButton variant="ghost" @click="settings.comfyuiFolder = suggestion">Use this folder</AppButton>
+        <AppButton variant="ghost" @click="applyFolder(suggestion)">Use this folder</AppButton>
       </div>
       <p v-if="content.lastError" class="mt-2 text-[11px] text-warn">{{ content.lastError }}</p>
     </div>

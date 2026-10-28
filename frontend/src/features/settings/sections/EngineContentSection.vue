@@ -29,6 +29,16 @@ const flavorLabel = computed(() => {
   return 'ComfyUI install'
 })
 
+const suggestedCorrection = computed(() => inspect.value?.suggestedFolder ?? '')
+const gitMissing = computed(() => inspect.value?.gitAvailable === false)
+
+async function applyFolder(path: string) {
+  if (!path) return
+  settings.comfyuiFolder = path
+  await settings.flushSettings()
+  await content.refresh()
+}
+
 /** Decimal units - model file sizes follow the `ollama list` convention. */
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
@@ -179,6 +189,12 @@ onMounted(() => void content.refresh())
           <span class="text-sm font-medium" :class="content.checking ? 'text-muted' : 'text-warn'">
             {{ content.checking ? 'Checking...' : inspect?.error ?? 'No ComfyUI folder configured yet.' }}
           </span>
+          <template v-if="suggestedCorrection">
+            <code class="max-w-full truncate rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">
+              {{ suggestedCorrection }}
+            </code>
+            <AppButton variant="ghost" @click="applyFolder(suggestedCorrection)">Use this folder</AppButton>
+          </template>
         </template>
         <div class="ml-auto">
           <AppButton variant="ghost" :disabled="content.checking" @click="content.refresh()">
@@ -201,7 +217,7 @@ onMounted(() => void content.refresh())
         <AppButton
           v-if="!settings.comfyuiFolder.trim() && inspect?.suggestions.length"
           variant="ghost"
-          @click="settings.comfyuiFolder = inspect.suggestions[0]"
+          @click="applyFolder(inspect.suggestions[0])"
         >
           Use detected folder
         </AppButton>
@@ -210,6 +226,13 @@ onMounted(() => void content.refresh())
         Detected from your launcher: <code class="rounded bg-surface-2 px-1 py-0.5">{{ inspect.suggestions[0] }}</code>
       </div>
       <p v-if="content.lastError" class="mt-2 text-[11px] text-warn">{{ content.lastError }}</p>
+      <p v-if="gitMissing" class="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-warn">
+        <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Git was not found. Git-based node installs and updates are disabled until Git is installed and the app is
+          restarted.
+        </span>
+      </p>
     </div>
 
     <!-- core baseline -->

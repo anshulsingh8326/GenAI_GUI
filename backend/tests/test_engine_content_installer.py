@@ -52,6 +52,8 @@ def comfy_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "load_requirements",
         lambda module_id: ("Test module", {"nodes": NODES}),
     )
+    # Planning tests should not depend on Git being on the test machine.
+    monkeypatch.setattr(installer, "_git_available", lambda: True)
     return root
 
 
@@ -71,6 +73,23 @@ def test_plan_refuses_unpinned_git_entry(comfy_root: Path) -> None:
 def test_plan_refuses_non_sha_commit(comfy_root: Path) -> None:
     with pytest.raises(installer.InstallError, match="full 40-character pinned commit"):
         installer._plan("test", "InvalidGit")
+
+
+def test_plan_refuses_git_install_when_git_is_missing(
+    comfy_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(installer, "_git_available", lambda: False)
+
+    with pytest.raises(installer.InstallError, match="Git is required"):
+        installer._plan("test", "PinnedGit")
+
+
+def test_plan_allows_package_without_git(comfy_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(installer, "_git_available", lambda: False)
+
+    plan = installer._plan("test", "PackageNode")
+
+    assert plan["action"] == "pip"
 
 
 def test_plan_allows_package_without_commit(comfy_root: Path) -> None:

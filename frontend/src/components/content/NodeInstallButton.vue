@@ -27,6 +27,9 @@ const busy = computed(() => task.value?.status === 'running')
 const unpinned = computed(
   () => Boolean(props.node.repo) && !props.node.package && !props.node.commit,
 )
+const gitMissing = computed(
+  () => Boolean(props.node.repo) && !props.node.package && content.inspect?.gitAvailable === false,
+)
 
 /* Loose prefix compare - manifests store full SHAs, installs report 12 chars. */
 function commitMatches(wanted: string, installed: string | null): boolean {
@@ -57,6 +60,9 @@ const verb = computed(() => {
 const confirmTitle = computed(() => `${verb.value} ${props.node.name}`)
 
 const actionDetail = computed(() => {
+  if (gitMissing.value) {
+    return 'Git is not installed. Install Git and restart the app before installing or updating git-based nodes.'
+  }
   if (unpinned.value) {
     return 'This entry has no pinned commit. Add a full 40-character SHA to requirements.json before installing.'
   }
@@ -131,7 +137,7 @@ watch(
       v-if="action"
       variant="ghost"
       size="sm"
-      :disabled="content.starting || content.installing"
+      :disabled="content.starting || content.installing || gitMissing || unpinned"
       :title="actionDetail"
       @click="openAction"
     >
@@ -172,7 +178,7 @@ watch(
         <AppButton variant="ghost" @click="confirmOpen = false">Cancel</AppButton>
         <AppButton
           variant="primary"
-          :disabled="content.starting || content.installing || unpinned"
+          :disabled="content.starting || content.installing || unpinned || gitMissing"
           @click="runInstall"
         >
           {{ content.starting ? 'Starting...' : verb }}

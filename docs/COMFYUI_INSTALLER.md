@@ -11,12 +11,12 @@ that a shipped manifest already contains; it can never send an arbitrary reposit
 
 | Manifest shape | Action | Notes |
 | --- | --- | --- |
-| `repo` + full 40-char pinned `commit`, folder missing | **clone** | `git clone` into staging, `checkout <commit>`, then move into `custom_nodes/`. |
-| same, but Git is not installed | **zip fallback** | GitHub codeload archive at the pinned commit. Refused for non-GitHub repos or missing commits. |
-| folder exists, has `.git`, `repo` + full 40-char `commit` | **update** | Refused when `git status --porcelain` is dirty. |
+| `repo` + full 40-char pinned `commit`, folder missing | **clone** | `git clone` into staging, `checkout <commit>`, then move into `custom_nodes/`. Requires Git on `PATH`. |
+| same, but Git is not installed | **refused** | Git is mandatory for node installs; there is no ZIP/download fallback. |
+| folder exists, has `.git`, `repo` + full 40-char `commit` | **update** | Refused when `git status --porcelain` is dirty. Requires Git. |
 | `repo` without a full 40-char `commit` | **refused** | Git entries are never installed from the default branch. |
 | folder exists without `.git` | **refused** | Never overwritten; the user must rename/remove it manually. |
-| `package` + `pip`, folder missing | **pip** | Runs the detected ComfyUI Python: `<python> -m pip install ...`. |
+| `package` + `pip`, folder missing | **pip** | Runs the detected ComfyUI Python: `<python> -m pip install ...`. Does not need Git. |
 | package already importable / folder installed | no button | The audit marks it installed; nothing runs. |
 
 - `moduleId = "core"` resolves the shared `backend/app/engine_content/core_requirements.json`.
@@ -26,15 +26,18 @@ that a shipped manifest already contains; it can never send an arbitrary reposit
   Package entries (`package` + `pip`) do not need a commit.
 - Node names are sanitized before becoming folder names. Only `http(s)` repository URLs are
   accepted; the GUI cannot supply paths.
+- Git is required for every clone/update. Planning fails with HTTP 400 when `git` is not on
+  `PATH`; `inspect` exposes `gitAvailable` so the GUI can warn before the user clicks
+  Install. `Setup.bat` offers to install Git for Windows.
 - Package-style installs use the `pip` field (for example `comfyui-manager>=4.2,<5`). For
   `comfyui_manager`, an official `comfy/manager_requirements.txt` inside the ComfyUI folder
   takes precedence, so new ComfyUI releases install their own pinned Manager version.
 
 ## 2. Stages and dependencies
 
-1. Plan: resolve the manifest entry, re-inspect the ComfyUI folder, find `custom_nodes/` and
-   the install Python. Invalid folders/entries fail before a task starts.
-2. Clone/update/download (staged outside `custom_nodes/`).
+1. Plan: resolve the manifest entry, re-inspect the ComfyUI folder, find `custom_nodes/`, the
+   install Python, and Git. Invalid folders/entries or missing Git fail before a task starts.
+2. Clone/update with Git (staged outside `custom_nodes/`).
 3. Move the finished node into `custom_nodes/<name>` (fails if the target appeared meanwhile).
 4. Dependencies: `requirements.txt` if present, otherwise `install.py`; otherwise skip.
    A missing Python is a **warning**, not a failure - the node stays installed and the log says
@@ -115,6 +118,8 @@ Settings -> **Engine content**:
    failure. Closing it ("Run in background") doesn't stop the install.
 4. On success: **Restart ComfyUI** and a terminal button to reopen the log.
 5. Only one install runs at a time; all other install buttons are disabled while it does.
+   Git-based buttons are also disabled when `inspect.gitAvailable` is false; package
+   installs remain available. Startup's setup popup shows the same warning.
 
 ## 6. Safety summary
 
@@ -132,7 +137,7 @@ The install engine was exercised against fake ComfyUI roots (seeded venv, empty
 - clone + pinned checkout + `requirements.txt` install;
 - update fetch/checkout, and a dirty checkout refused with the local file intact;
 - package install into a fake venv (`comfyui-manager`), detected in site-packages;
-- zip fallback with Git disabled, including the no-Python warning;
+- Git-missing planning refusal (git entries) and package planning without Git;
 - restart with no connection configured;
 - GUI install and update (task log, audit refresh, Update disappearing when HEAD matches).
 

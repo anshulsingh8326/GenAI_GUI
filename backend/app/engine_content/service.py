@@ -16,6 +16,7 @@ phases behind explicit user clicks.
 from __future__ import annotations
 
 import json
+import shutil
 import struct
 from pathlib import Path
 
@@ -124,6 +125,43 @@ def suggest_folder() -> list[str]:
     return found[:3]
 
 
+def _source_folder_suggestion(selected: Path) -> str | None:
+    """Best candidate when the user picked a launcher, parent, or subfolder.
+
+    Selecting `...\\ComfyUI_windows_portable` (or a file inside it) is a common
+    mistake. The app never changes the saved setting by itself; it only returns
+    a candidate that the GUI can apply with one click.
+    """
+    try:
+        base = selected.parent if selected.is_file() else selected
+    except OSError:
+        base = selected
+
+    candidates: list[Path] = []
+    current = base
+    for _ in range(3):
+        candidates.extend((current / "ComfyUI", current))
+        try:
+            current = current.parent
+        except OSError:
+            break
+        if current == current.parent:
+            break
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            key = str(candidate).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            if (candidate / "main.py").is_file():
+                return str(candidate)
+        except OSError:
+            continue
+    return None
+
+
 # -- inspection -----------------------------------------------------------------
 
 
@@ -147,6 +185,8 @@ def inspect(folder: str | None = None) -> dict:
         "models": [],  # [{ category, files, bytes, items[] }]
         "extraModelPathsFile": False,
         "suggestions": suggest_folder() if not configured else [],
+        "suggestedFolder": None,
+        "gitAvailable": shutil.which("git") is not None,
         "error": None,
     }
     if not target:
@@ -155,16 +195,24 @@ def inspect(folder: str | None = None) -> dict:
 
     root = Path(target)
     try:
+        is_file = root.is_file()
         is_dir = root.is_dir()
     except OSError:
+        is_file = False
         is_dir = False
     if not is_dir:
-        report["error"] = "That folder does not exist."
+        report["suggestedFolder"] = _source_folder_suggestion(root)
+        report["error"] = (
+            "That is a file - pick the ComfyUI source folder."
+            if is_file
+            else "That folder does not exist."
+        )
         return report
 
     report["path"] = str(root)
     report["mainPy"] = (root / "main.py").is_file()
     if not report["mainPy"]:
+        report["suggestedFolder"] = _source_folder_suggestion(root)
         report["error"] = (
             "No main.py in this folder - pick the ComfyUI source folder "
             "(the one that contains custom_nodes/ and models/)."

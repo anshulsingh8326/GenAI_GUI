@@ -47,6 +47,13 @@ ComfyUI **source folder**, i.e. the one containing `main.py`, `custom_nodes/` an
 - When `comfyuiFolder` is empty, the response carries **`suggestions`** derived from the
   launcher path (`comfyuiLauncher`): `<launcher folder>\ComfyUI` first, then the launcher
   folder itself. The GUI shows a one-click "Use this folder".
+- When the saved folder is wrong, the response carries **`suggestedFolder`**: a nearby folder
+  with `main.py` found by checking the selected folder, its parents, and their `ComfyUI`
+  children. This covers selecting the Portable root (`...\ComfyUI_windows_portable`), a
+  launcher `.bat`, or `custom_nodes/`. The GUI offers "Use this folder"; the saved setting is
+  never changed automatically.
+- `inspect` also returns **`gitAvailable`** (`git` on `PATH`). Git-based node installs are
+  disabled without it; package installs still work. There is no ZIP fallback.
 - An optional `?path=` lets the GUI preview a candidate before it is saved.
 - A file whose inferred kind doesn't fit its folder gets `suggestedCategory` (e.g. a Qwen3-VL
   text encoder found in `models/unet`). It is a warning only - **the app never moves files**.
@@ -179,9 +186,8 @@ See `docs/COMFYUI_INSTALLER.md` for the full API, task shape, command limits and
 - Mechanic (mirrors what ComfyUI-Manager / `comfy-cli` do):
   1. `git clone <repo>` into staging, `checkout <commit>`, then move it to
      `custom_nodes/<name>` (or `git fetch` + `checkout <commit>` for an existing git
-     checkout) - **falls back to a zip download**
-     (`codeload.github.com/<repo>/zip/<sha>`) when git is not on the machine. The zip fallback
-     requires a GitHub repo and a pinned commit.
+     checkout). **Git is required**; there is no ZIP fallback. Planning and the GUI both
+     report `gitAvailable`, so a missing Git installation is clear before any write.
   2. If `requirements.txt` exists: `<python> -m pip install -r requirements.txt`.
      Else if `install.py` exists: `<python> install.py`.
   3. Every command streams into a task log (last 500 lines, 15-minute timeout); failures
@@ -197,6 +203,14 @@ See `docs/COMFYUI_INSTALLER.md` for the full API, task shape, command limits and
   relaunch (the launcher button is right there).
 - Pinned commits only; version skew is reported ("installed: abc1234, wanted: def5678") and
   never auto-updated. After each task the GUI re-runs the audit.
+- **Startup setup popup** (`ComfySetupModal.vue`): when the app starts, the audit lists
+  missing **required** custom nodes from the core baseline and every installed GenModule,
+  grouped by manifest, with individual Install buttons. It never uses `ready`,
+  `missingModels`, optional nodes, or model downloads to decide whether to open. If the
+  ComfyUI folder is missing/invalid, the popup asks for the folder first (with the
+  `suggestedFolder` one-click correction). Git/Python warnings appear inline; dismissing the
+  popup is remembered for that setup state in the current browser session. The full audit
+  remains in Settings → Engine content.
 
 ## 5. Phase C - model downloads (planned)
 
@@ -230,7 +244,7 @@ up" experience without shipping gigabytes in the repo.
 
 | Phase | Endpoint | Purpose |
 | --- | --- | --- |
-| A | `GET /api/comfyui/inspect?path=` | validate folder, flavor, python, nodes, model inventory (kind/arch/base/triggers), suggestions |
+| A | `GET /api/comfyui/inspect?path=` | validate folder, flavor, python, `gitAvailable`, nodes, model inventory (kind/arch/base/triggers), suggestions and `suggestedFolder` |
 | A | `GET /api/comfyui/requirements` | core baseline + per-module node/model audit |
 | B | `POST /api/comfyui/nodes/install` | install/update/repair one declared node or package (pinned, 202 + task) |
 | B | `GET /api/comfyui/nodes/tasks` | recent install tasks |

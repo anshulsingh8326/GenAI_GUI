@@ -8,7 +8,7 @@ Safety (docs/COMFYUI_CONTENT.md §4):
 - full 40-character pinned commits only; unpinned git entries are refused;
   updates are also refused when the checkout has local changes;
 - the folder is staged first and moved into `custom_nodes/` on success, so a
-  failed download never leaves a half-written node behind;
+  failed clone never leaves a half-written node behind;
 - nothing is deleted from the user's install; a failed pip step leaves the node
   in place for a retry;
 - installs are serialized (one at a time) and stream a log to the GUI.
@@ -22,7 +22,6 @@ import shutil
 import subprocess
 import threading
 import uuid
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -119,6 +118,13 @@ def _git_available() -> bool:
     return shutil.which("git") is not None
 
 
+def _require_git() -> None:
+    if not _git_available():
+        raise InstallError(
+            "Git is required to install or update ComfyUI nodes. Install Git, restart the app, and try again."
+        )
+
+
 def _validate_repo(repo: str) -> None:
     if not re.match(r"^https?://[^\s]+$", repo):
         raise InstallError("Only http(s) repositories are supported.")
@@ -193,6 +199,7 @@ def _plan(module_id: str, node_name: str) -> dict:
                 "requirements.json has no pinned commit - refusing to install or update an unpinned checkout."
             )
         _validate_commit(commit)
+        _require_git()
 
     return {
         "moduleId": module_id,
@@ -301,32 +308,31 @@ def _install_pip(task: dict, plan: dict) -> None:
 
 
 def _install_clone(task: dict, plan: dict) -> None:
+    _require_git()
     target = Path(plan["target"])
     if target.exists():
         raise InstallError("The target folder appeared while installing - aborting without touching it.")
 
-    if _git_available():
-        staging = _staging_dir(task)
-        try:
-            staging.mkdir(parents=True, exist_ok=True)
-            checkout = staging / "repo"
-            _set(task, stage="cloning")
-            _log(task, f"git clone {plan['repo']}")
-            _run_command(task, ["git", "clone", "--quiet", plan["repo"], str(checkout)], cwd=staging)
-            if plan["commit"]:
-                _set(task, stage="checking out pinned commit")
-                _log(task, f"git checkout {plan['commit']}")
-                _run_command(task, ["git", "-C", str(checkout), "checkout", "--quiet", plan["commit"]])
-            shutil.move(str(checkout), str(target))
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-    else:
-        _install_zip(task, plan)
+    staging = _staging_dir(task)
+    try:
+        staging.mkdir(parents=True, exist_ok=True)
+        checkout = staging / "repo"
+        _set(task, stage="cloning")
+        _log(task, f"git clone {plan['repo']}")
+        _run_command(task, ["git", "clone", "--quiet", plan["repo"], str(checkout)], cwd=staging)
+        if plan["commit"]:
+            _set(task, stage="checking out pinned commit")
+            _log(task, f"git checkout {plan['commit']}")
+            _run_command(task, ["git", "-C", str(checkout), "checkout", "--quiet", plan["commit"]])
+        shutil.move(str(checkout), str(target))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
     _install_python_deps(task, plan)
 
 
 def _update_node(task: dict, plan: dict) -> None:
+    _require_git()
     target = Path(plan["target"])
     _set(task, stage="checking local changes")
     _log(task, "Checking the checkout for local changes...")
@@ -424,68 +430,6 @@ def _run_command(task: dict, command: list[str], cwd: Path | None = None) -> Non
     if code != 0:
         detail = f" Last output: {tail[-1]}" if tail else ""
         raise InstallError(f"{Path(str(command[0])).name} exited with code {code}.{detail}")
-
-
-# -- zip fallback ---------------------------------------------------------------
-
-
-def _zip_url(repo: str, commit: str) -> str:
-    match = re.match(r"^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo)
-    if not match:
-        raise InstallError("Git is not installed and this repository is not on GitHub - install Git or the node manually.")
-    if not commit:
-        raise InstallError("Git is not installed and requirements.json has no pinned commit - cannot use the zip fallback.")
-    owner, name = match.group(1), match.group(2)
-    return f"https://codeload.github.com/{owner}/{name}/zip/{commit}"
-
-
-def _download(task: dict, url: str, target: Path) -> None:
-    _log(task, f"Downloading {url}")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    part = target.with_suffix(target.suffix + ".part")
-    try:
-        with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with open(part, "wb") as handle:
-                    for chunk in response.iter_bytes():
-                        handle.write(chunk)
-        os.replace(part, target)
-    finally:
-        if part.exists():
-            part.unlink(missing_ok=True)
-
-
-def _safe_extract(archive: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    root = destination.resolve()
-    with zipfile.ZipFile(archive) as bundle:
-        for member in bundle.infolist():
-            resolved = (root / member.filename).resolve()
-            if resolved != root and root not in resolved.parents:
-                raise InstallError("The downloaded archive contains an unsafe path - aborted.")
-        bundle.extractall(root)
-
-
-def _install_zip(task: dict, plan: dict) -> None:
-    _set(task, stage="downloading")
-    staging = _staging_dir(task)
-    try:
-        staging.mkdir(parents=True, exist_ok=True)
-        archive = staging / "node.zip"
-        extract_root = staging / "extract"
-        _download(task, _zip_url(plan["repo"], plan["commit"]), archive)
-        _safe_extract(archive, extract_root)
-        candidates = [entry for entry in extract_root.iterdir() if entry.is_dir()]
-        if not candidates:
-            raise InstallError("The downloaded archive did not contain a folder.")
-        source = next((entry for entry in candidates if (entry / "__init__.py").is_file()), candidates[0])
-        target = Path(plan["target"])
-        if target.exists():
-            raise InstallError("The target folder appeared while installing - aborting without touching it.")
-        shutil.move(str(source), str(target))
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
 
 
 # -- restart --------------------------------------------------------------------

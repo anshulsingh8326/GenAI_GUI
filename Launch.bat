@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 title GenAI GUI backend - Ctrl+C or close this window to stop
 
@@ -7,14 +7,17 @@ rem ============================================================================
 rem  GenAI GUI launcher
 rem
 rem  One double-click:
-rem    1. creates backend\.venv (one time - via uv, or Python + pip fallback)
-rem    2. builds frontend\dist (one time - needs Node.js/npm)
+rem    1. calls Setup.bat when backend\.venv or the frontend build is missing;
+rem       Setup handles uv/Python, Git and (only when needed) Node.js/npm;
+rem    2. rebuilds frontend\dist when Vue sources/config are newer than the
+rem       existing build (and npm is available);
 rem    3. runs the backend IN THIS WINDOW - it serves the built frontend - and
-rem       opens the app in your browser once the backend is up
+rem       opens the app in your browser once the backend is up.
 rem
 rem  Everything lives inside this folder: backend\.venv, frontend\node_modules,
-rem  frontend\dist, data\. The only external tools are uv (or Python 3.11+)
-rem  and Node.js - see README in tools\ for the fully self-contained option.
+rem  frontend\dist, data\. The only external tools are uv (or Python 3.11+),
+rem  Git for ComfyUI node installs, and Node.js for rebuilding the frontend.
+rem  See tools\README.md and Setup.bat.
 rem
 rem  To stop the app: press Ctrl+C here (or just close this window).
 rem  Backend logs stream right here in this console.
@@ -22,43 +25,31 @@ rem ============================================================================
 
 set "PY=backend\.venv\Scripts\python.exe"
 set "URL=http://127.0.0.1:8766"
+set "SETUP_NEEDED="
 
-rem ------------------------------------------------------------- backend env --
-if not exist "%PY%" (
-  echo [setup] Backend environment missing - creating backend\.venv ...
-  set "UV="
-  where uv >nul 2>nul
-  if !errorlevel! EQU 0 set "UV=uv"
-  if not defined UV if exist "tools\uv.exe" set "UV=tools\uv.exe"
-  if defined UV (
-    "!UV!" sync --directory backend --link-mode copy
-  ) else (
-    where python >nul 2>nul
-    if !errorlevel! NEQ 0 goto :nopython
-    echo        uv not found - falling back to Python + pip ^(needs internet^) ...
-    python -m venv backend\.venv
-    "%PY%" -m pip install --upgrade pip
-    rem keep this list in sync with backend\pyproject.toml
-    "%PY%" -m pip install "fastapi>=0.115" "httpx>=0.28" "mcp>=1.0" "pillow>=11.0" "psutil>=6.0" "python-multipart>=0.0.18" "uvicorn[standard]>=0.32"
+if not exist "%PY%" set "SETUP_NEEDED=1"
+if not exist "frontend\dist\index.html" set "SETUP_NEEDED=1"
+if not defined SETUP_NEEDED (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\needs-frontend-build.ps1"
+  if !errorlevel! EQU 0 (
+    where npm >nul 2>nul
+    if !errorlevel! EQU 0 (
+      set "SETUP_NEEDED=1"
+    ) else (
+      echo [warn] Vue sources are newer than frontend\dist, but Node.js/npm was not found.
+      echo        Using the existing build. Install Node.js and run Setup.bat to rebuild.
+    )
   )
-  if not exist "%PY%" goto :fail
 )
 
-rem ---------------------------------------------------------- frontend build --
-if not exist "frontend\dist\index.html" (
-  echo [setup] Frontend not built yet - building frontend\dist ...
-  where npm >nul 2>nul
-  if !errorlevel! NEQ 0 goto :nonode
-  pushd frontend
-  if not exist node_modules (
-    if exist package-lock.json ( call npm ci ) else ( call npm install )
-    if !errorlevel! NEQ 0 ( popd & goto :fail )
-  )
-  call npm run build
-  set "BUILD_ERR=!errorlevel!"
-  popd
-  if not "!BUILD_ERR!"=="0" goto :fail
+if defined SETUP_NEEDED (
+  echo [setup] Preparing the backend/frontend - see Setup.bat for details.
+  call "%~dp0Setup.bat" --launch
+  if errorlevel 1 goto :fail
 )
+
+if not exist "%PY%" goto :nosetup
+if not exist "frontend\dist\index.html" goto :nosetup
 
 rem -------------------------------------------------- already running? --------
 powershell -NoProfile -Command "try{if((Invoke-WebRequest -UseBasicParsing '%URL%/api/health' -TimeoutSec 2).StatusCode -eq 200){exit 0}}catch{};exit 1" >nul 2>nul
@@ -81,19 +72,9 @@ echo.
 echo [app] Backend stopped.
 exit /b 0
 
-:nopython
+:nosetup
 echo.
-echo Could not create the backend environment: neither "uv" nor Python was found.
-echo Install uv (https://docs.astral.sh/uv/) - or copy uv.exe into the tools\
-echo folder next to this script - and run Launch.bat again.
-echo.
-pause
-exit /b 1
-
-:nonode
-echo.
-echo The frontend has never been built and Node.js/npm was not found.
-echo Install Node.js (https://nodejs.org/) and run Launch.bat again.
+echo Backend setup did not finish. Run Setup.bat to see what is missing.
 echo.
 pause
 exit /b 1

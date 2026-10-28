@@ -383,6 +383,15 @@ export const useSettingsStore = defineStore('settings', () => {
     saveTimer = setTimeout(pushSettings, delayMs)
   }
 
+  /** Push pending edits immediately - used before a refresh that reads settings.json. */
+  async function flushSettings(): Promise<void> {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    await pushSettings()
+  }
+
   let syncing = false
   let lastSyncAt = 0
 
@@ -506,6 +515,7 @@ export const useSettingsStore = defineStore('settings', () => {
     lastError,
     // actions
     syncFromBackend,
+    flushSettings,
     ensureSynced,
     activeProfile,
     setActiveProfile,

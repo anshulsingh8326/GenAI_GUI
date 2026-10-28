@@ -13,11 +13,14 @@ the backend serves the built GUI and owns all state (settings, jobs, assets). An
 ## Quick start
 
 1. Double-click **`Launch.bat`**.
-2. First run only: it creates `backend\.venv` and builds `frontend\dist`
-   (needs `uv` or Python 3.11+; Node.js is needed once for the build - see
-   `tools\README.md` for the fully portable, no-install option).
-3. After that it runs the backend **in the same console window** and opens
-   <http://127.0.0.1:8766> in your browser.
+2. On first run it calls **`Setup.bat`**: creates `backend\.venv` with `uv`
+   (or Python 3.11+), checks **Git** (required for ComfyUI node installs, no
+   ZIP fallback), and builds `frontend\dist` when needed. Missing tools are
+   only installed after a Y/N prompt; Node.js is only needed for a frontend
+   build. See `tools\README.md` for the included portable `uv.exe` option.
+3. It rebuilds the Vue frontend automatically when sources/configs are newer
+   than `frontend\dist`, then runs the backend **in the same console window**
+   and opens <http://127.0.0.1:8766> in your browser.
 
 To stop the app: press `Ctrl+C` in that window - or just close it. Nothing keeps
 running in the background.
@@ -35,14 +38,17 @@ running in the background.
   shortcut. A switch in the same section can start it automatically whenever the app
   launches (off by default; skipped when ComfyUI is already running).
 - **ComfyUI content check** - point *Settings -> Connections* at your ComfyUI source folder
-  (the one with `main.py`; auto-detected from the launcher). *Settings -> Engine content*
-  then reports the shared core baseline (GGUF loader required, Manager recommended), what
-  each generation module needs, and every model file grouped by what it generates (image /
-  video / LoRA / VAE / encoder) - kinds and LoRA triggers are read from file headers only.
-  Node/package installers for declared requirements are implemented; verified model downloads
-  are the next phase. The editable model/LoRA catalog (`data/model_catalog.json`,
-  *Settings -> Model catalog*) tracks model links, strength ranges and trigger words and feeds
-  the composer - see `docs/MODEL_CATALOG.md`.
+  (the one with `main.py`; auto-detected from the launcher, with a one-click correction when
+  you pick the Portable root or a subfolder). *Settings -> Engine content* then reports the
+  shared core baseline (GGUF loader required, Manager recommended), what each generation
+  module needs, and every model file grouped by what it generates (image / video / LoRA /
+  VAE / encoder) - kinds and LoRA triggers are read from file headers only. A startup popup
+  lists missing **required custom nodes** with individual install buttons; optional nodes and
+  models never trigger it. Node/package installers for declared requirements are implemented;
+  verified model downloads are the next phase. Git is required for installs. The editable
+  model/LoRA catalog (`data/model_catalog.json`, *Settings -> Model catalog*) tracks model
+  links, strength ranges and trigger words and feeds the composer - see
+  `docs/MODEL_CATALOG.md`.
 - **Text → Image (T2I_main)** - strict T2I through ComfyUI with Krea 2 Turbo: model-aware
   ranges, LoRA chaining, latent refine or 4x-UltraSharp, prompt enhancement, batch generation
   and visible upscale on/off. Settings persist across tabs/reloads; every panel has a reset.
@@ -99,7 +105,8 @@ production (that is what `Launch.bat` uses).
 
 `backend/` FastAPI app + MCP server · `frontend/` Vue 3 SPA (one folder per module in
 `src/features/`) · `data/` runtime state (settings.json, SQLite, library, trash - never
-committed) · `docs/` plans and guidelines · `tools/` optional portable `uv.exe`.
+committed) · `docs/` plans and guidelines · `tools/` optional portable `uv.exe` ·
+`Setup.bat` / `Launch.bat` bootstrap and run the app.
 
 Full structure: `docs/PLAN.md` §7.
 
@@ -116,4 +123,4 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/GENMODULE_GUIDE.md` | reusable GenModule architecture, packs, jobs, library and media viewer |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
-| `tools/README.md` | the fully self-contained (uv.exe) option |
+| `tools/README.md` | setup checks, portable `uv.exe`, frontend rebuild rules |

@@ -172,9 +172,10 @@ GenAI_GUI/
 │  └─ presets/             # starter presets
 ├─ docs/                   # REQUIREMENTS · PLAN · PACKS · GUI_GUIDELINES · BACKEND_GUIDELINES
 ├─ tools/                  # optional drop-in uv.exe (fully portable backend bootstrap)
-├─ scripts/                # dev helpers (start-backend.cmd)
+├─ scripts/                # dev helpers + setup/build checks (start-backend.cmd, download-uv.ps1)
 ├─ data/                   # runtime: settings.json · app.db · library/ · thumbnails/ · trash/ · agent-inbox/
-├─ Launch.bat              # one double-click: .venv + dist build + serves in the same console
+├─ Setup.bat               # prerequisite check: uv/Python, Git, conditional frontend build
+├─ Launch.bat              # one double-click: calls Setup when needed + serves in the same console
 └─ workflows-archive/      # my current ComfyUI graphs (reference)  ← move the 4 root JSONs here later
 ```
 
