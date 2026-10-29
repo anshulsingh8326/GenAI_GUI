@@ -226,7 +226,7 @@ See `docs/COMFYUI_INSTALLER.md` for the full API, task shape, command limits and
 ## 6. Phase D - new-user bootstrap (planned, optional)
 
 A "Get ComfyUI" action in Settings for fresh machines: downloads the official ComfyUI
-Portable release (comfy.org / GitHub releases link in onboarding), extracts it to a folder
+Portable release (GitHub releases link in onboarding), extracts it to a folder
 the user picks, sets `comfyuiLauncher` + `comfyuiFolder` automatically, then offers the
 module content installs from Phase B/C. This gives the "one download and everything is set
 up" experience without shipping gigabytes in the repo.

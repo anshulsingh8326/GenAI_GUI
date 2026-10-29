@@ -150,9 +150,13 @@ function openSettings(tab = 'content') {
         </div>
 
         <p class="text-[11px] text-muted">
-          The app does not bundle ComfyUI. Download the portable or desktop release from
-          <a class="text-accent underline-offset-2 hover:underline" href="https://www.comfy.org/download" target="_blank" rel="noreferrer">comfy.org/download</a>,
-          then point the field above at its <code class="rounded bg-surface-2 px-1">ComfyUI</code> folder.
+          The app does not bundle ComfyUI. Download
+          <a class="text-accent underline-offset-2 hover:underline" href="https://github.com/comfyanonymous/ComfyUI/releases/latest/download/ComfyUI_windows_portable_nvidia.7z" target="_blank" rel="noreferrer">ComfyUI Windows portable (NVIDIA)</a>,
+          extract it with
+          <a class="text-accent underline-offset-2 hover:underline" href="https://www.7-zip.org/" target="_blank" rel="noreferrer">7-Zip</a>,
+          then point the field above at the inner
+          <code class="rounded bg-surface-2 px-1">ComfyUI</code> folder. For other GPUs or builds, use the
+          <a class="text-accent underline-offset-2 hover:underline" href="https://github.com/Comfy-Org/ComfyUI" target="_blank" rel="noreferrer">ComfyUI GitHub repository</a>.
         </p>
       </div>
 

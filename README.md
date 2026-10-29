@@ -31,14 +31,41 @@ running in the background.
 
 The app is the GUI; it does **not** include ComfyUI or any model files.
 
+**Prerequisites and versions**
+
+| Tool | Minimum | Recommended / tested | Needed for |
+| --- | --- | --- | --- |
+| uv | latest | 0.13.6 | Backend bootstrap; it installs a project-local Python. |
+| Python | 3.11 | 3.13.x | Backend runtime. Setup uses uv to install 3.13; a manually installed Python 3.11+ also works as the fallback. |
+| Node.js | 22.18 | 24 LTS (24.22.1 tested) | Building `frontend\dist` only. |
+| Git for Windows | latest 2.x | latest 2.x | ComfyUI custom-node installs only. |
+| 7-Zip | any recent | latest | Extracting the ComfyUI portable `.7z`. |
+| ComfyUI | 0.26+ | latest (0.30.0 tested) | The image generation engine. Krea 2 needs 0.26+. |
+
+`uv` installs Python; Python does not install `uv`. Python is required at
+runtime. Node.js is only needed when the UI has to be built; a release that
+includes `frontend\dist` runs without Node. Git is optional to open the app, but
+custom-node installs are disabled until it is installed.
+
+For a manual setup, install **uv** (or Python 3.11+) and **Git** first; install
+**Node 24 LTS** only if `frontend\dist` is missing or you change the frontend.
+`Launch.bat` reuses tools already on `PATH` and only prompts for a portable
+download when it needs one.
+
 **What you need**
 
 - Windows 10/11 64-bit. The one-click `Launch.bat` flow is Windows-only for now.
 - Internet access for the first setup.
-- [ComfyUI](https://www.comfy.org/download) - the portable release is easiest.
-  Download and unzip it anywhere with enough disk space.
+- [ComfyUI Windows portable for NVIDIA](https://github.com/comfyanonymous/ComfyUI/releases/latest/download/ComfyUI_windows_portable_nvidia.7z) -
+  the portable release is easiest. Extract it with
+  [7-Zip](https://www.7-zip.org/) and point the app at the inner
+  `ComfyUI_windows_portable\ComfyUI` folder. For AMD/older GPUs or other builds,
+  use the [ComfyUI GitHub repository](https://github.com/Comfy-Org/ComfyUI), not
+  the Desktop download page.
 - Model files are **not** downloaded by this app. You can add them later; image
   generation will not work until the model files a workflow needs are present.
+  See [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md) for the manual
+  download list, exact filenames and target folders.
 
 **Steps**
 
@@ -62,7 +89,7 @@ The app is the GUI; it does **not** include ComfyUI or any model files.
    `...\ComfyUI_windows_portable\ComfyUI`
    not the outer `ComfyUI_windows_portable` folder. **Browse...** opens a folder
    picker; if the app detects a folder it also offers **Use this folder**. If
-   you do not have ComfyUI yet, use the download link shown in the popup.
+   you do not have ComfyUI yet, use the portable link in **What you need**.
 5. Check the list of **required custom nodes**. Installing is always an explicit
    action: click **Install**, confirm, and wait for the log. Git-based installs
    are pinned to a commit. When finished, click **Restart ComfyUI** if the log
@@ -71,8 +98,9 @@ The app is the GUI; it does **not** include ComfyUI or any model files.
    *Settings -> Connections* at your ComfyUI start `.bat` and use **Launch
    ComfyUI** there.
 7. Add model files. **Settings -> Engine content** shows the files each module
-   expects; this app does not download models yet. Optional nodes and models
-   live there too.
+   expects; this app does not download models yet. See
+   [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md) for manual links,
+   exact filenames and target folders. Optional nodes and models live there too.
 8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
    prompt enhancement.
 
