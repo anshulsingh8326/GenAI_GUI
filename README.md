@@ -98,9 +98,10 @@ download when it needs one.
    *Settings -> Connections* at your ComfyUI start `.bat` and use **Launch
    ComfyUI** there.
 7. Add model files. **Settings -> Engine content** shows the files each module
-   expects; this app does not download models yet. See
+   expects; this app does not download models yet. The Krea 2 module supports
+   either **SNOFS_Krea2** (int8) or **Krea2 Turbo Q5_K_M** (GGUF); see
    [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md) for manual links,
-   exact filenames and target folders. Optional nodes and models live there too.
+   filenames and target folders. Optional nodes and models live there too.
 8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
    prompt enhancement.
 
