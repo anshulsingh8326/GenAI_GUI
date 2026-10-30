@@ -1,8 +1,8 @@
 {
   "version": 1,
   "id": "krea2",
-  "label": "Krea 2",
-  "description": "Krea 2 Turbo text-to-image with the Qwen3-VL text encoder, qwen_image VAE, optional LoRA chain, latent refine and 4x-UltraSharp. Includes the SNOFS_Krea2 int8 reference model and the Krea2 Turbo Q5_K_M GGUF alternative.",
-  "nsfw": true,
+  "label": "Krea 2 Turbo",
+  "description": "Krea 2 Turbo Q5_K_M with Qwen3-VL text encoder, qwen_image VAE, optional LoRA chain, latent refine and 4x-UltraSharp. Generic Krea 2 filenames are detected; SNOFS files belong to the separate SNOFS pack.",
+  "nsfw": false,
   "order": 10
 }

@@ -97,14 +97,26 @@ download when it needs one.
 6. Start ComfyUI if it is not already running. You can point
    *Settings -> Connections* at your ComfyUI start `.bat` and use **Launch
    ComfyUI** there.
-7. Add model files. **Settings -> Engine content** shows the files each module
-   expects; this app does not download models yet. The Krea 2 module supports
-   either **SNOFS_Krea2** (int8) or **Krea2 Turbo Q5_K_M** (GGUF); install just
-   one. The Text -> Image **Setup** popup lists any missing required files,
-   destination folders and download/source links, and accepts common renamed
-   filenames through aliases. See
-   [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md) for manual links,
-   filenames and target folders. Optional nodes and models live there too.
+7. Add model files. Pick **one** base (install both only if you want both packs):
+   - **Krea 2 Turbo** — [krea2_turbo-Q5_K_M.gguf](https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q5_K_M.gguf)
+     → `ComfyUI/models/unet/`
+   - **Krea 2 SNOFS** — [SNOFS_Krea2 int8](https://civitai.com/models/2416142?modelVersionId=3333138)
+     → `ComfyUI/models/unet/`
+   - **Text encoder (shared)** — [qwen3vl_4b_fp8_scaled.safetensors](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors)
+     → `ComfyUI/models/text_encoders/`
+   - **VAE (shared)** — [qwen_image_vae.safetensors](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors)
+     → `ComfyUI/models/vae/`
+
+   Then use **Settings -> Model catalog -> Refresh from ComfyUI**. The Text -> Image
+   **Setup** popup shows the same links, destination folders and missing files, and
+   accepts common renamed filenames through aliases. Full list:
+   [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md).
+
+   Optional extras, separate from the base model:
+   - **Realism Engine LoRA** (enabled by default) — [direct file](https://huggingface.co/RazzzHF/realism_engine_krea2/resolve/main/realism_engine_krea2_v3.1.safetensors)
+     → `ComfyUI/models/loras/`
+   - **4x-UltraSharp** (off by default) — [direct file](https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth)
+     → `ComfyUI/models/upscale_models/`
 8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
    prompt enhancement.
 
@@ -141,10 +153,14 @@ release that needs no Node, build the frontend first and include
   links, strength ranges and trigger words and feeds the composer - see
   `docs/MODEL_CATALOG.md`.
 - **Text → Image (T2I_main)** - strict T2I through ComfyUI with Krea 2 Turbo: model-aware
-  ranges, LoRA chaining, latent refine or 4x-UltraSharp, prompt enhancement, batch generation
-  and visible upscale on/off. One `krea2` pack supports **SNOFS_Krea2** and **Krea2 Turbo
-  Q5_K_M** as a one-of base group; renamed or differently formatted filenames are matched
-  through aliases and the real catalog filename is bound into the graph. A first-open
+  ranges, LoRA chaining, optional latent refine or 4x-UltraSharp (off by default), prompt
+  enhancement, batch generation and visible upscale on/off. Two packs share one graph:
+  **Krea 2 Turbo** (Q5_K_M, 9 steps / CFG 2.0, not NSFW) and **Krea 2 SNOFS** (int8,
+  12 steps / CFG 2.5). Each pack has its own
+  `defaults.json`; edit that one file for its sampling, size, refine, upscaler and LoRA-chain
+  defaults. Only the Realism Engine LoRA is enabled by default; the other LoRAs start off.
+  Generic Krea 2 filenames are matched through aliases and the real catalog
+  filename is bound into the graph. A first-open
   **Setup** popup reports
   missing required files, folders, sizes and links (and never downloads anything). Settings
   persist across tabs/reloads; every panel has a reset. History is a chat workspace with

@@ -110,8 +110,15 @@ def best_alias_match(
     *,
     name_key: str = "name",
     target: str | None = None,
+    exclude_aliases: Iterable[Any] | None = None,
 ) -> dict | None:
-    """Pick the best catalog entry for an alias list, optionally by folder."""
+    """Pick the best catalog entry for an alias list, optionally by folder.
+
+    ``exclude_aliases`` lets a broad fallback (for example a generic
+    ``krea2`` family alias) refuse a file that belongs to a more specific
+    pack variant (for example SNOFS). Exclusions are checked against the real
+    catalog filename, never by renaming or moving the file.
+    """
     wanted_target = (target or "").strip().casefold()
     best: dict | None = None
     best_score = 0
@@ -122,6 +129,8 @@ def best_alias_match(
             continue
         # Missing catalog entries are kept for history, not for graph binding.
         if entry.get("present") is False:
+            continue
+        if exclude_aliases and name_has_alias(entry.get(name_key), exclude_aliases):
             continue
         score = alias_score(entry.get(name_key), aliases)
         if score <= 0:

@@ -29,21 +29,24 @@ const hasUsableUpscaler = computed(() =>
   ),
 )
 
-const modelOptions = computed(() =>
-  (catalog.value?.models ?? []).map((item) => {
+const modelOptions = computed(() => {
+  const models = catalog.value?.models ?? []
+  const showPack = new Set(models.map((item) => item.packId)).size > 1
+  return models.map((item) => {
     const tags: string[] = []
     if (item.nsfw) tags.push('NSFW')
     if (item.present === false) {
       const missing = item.baseGroupSatisfied === false || item.required !== false
       tags.push(missing ? 'missing' : 'optional, not installed')
     }
+    const name = showPack ? `${item.shortLabel} · ${item.packLabel}` : item.shortLabel
     return {
       value: item.id,
-      label: tags.length ? `${item.shortLabel} (${tags.join(', ')})` : item.shortLabel,
+      label: tags.length ? `${name} (${tags.join(', ')})` : name,
       disabled: item.present === false,
     }
-  }),
-)
+  })
+})
 
 const ratioOptions = computed(() =>
   (catalog.value?.ratios ?? []).map((item) => ({ value: item.id, label: item.label })),

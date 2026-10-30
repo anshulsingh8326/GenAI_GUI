@@ -1,202 +1,7 @@
 {
   "version": 1,
-  "description": "T2I_main model bindings and per-model ranges. This file is authoritative for the Text -> Image module; edit it (within the hard limits) to widen ranges for pro use.",
+  "description": "T2I_main Krea 2 Turbo model binding and ranges. Defaults live in defaults.json; this file controls bindings and safe ranges only.",
   "models": [
-    {
-      "id": "krea2-turbo-int8",
-      "catalogId": "model-snofssexnudesandother-krea2turbov14-int8",
-      "label": "SNOFS_Krea2",
-      "shortLabel": "SNOFS_Krea2",
-      "family": "Krea 2",
-      "base": "krea2",
-      "description": "SNOFS Krea 2 Turbo V14 int8 (8-bit) diffusion model. Fast, LoRA-friendly and the reference Freeze v8 path.",
-      "loader": "UNETLoader",
-      "file": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
-      "target": "unet",
-      "aliases": [
-        "SNOFS_Krea2",
-        "snofs_krea2",
-        "snofs",
-        "snofsSexNudesAndOther",
-        "snofsSexNudesAndOther_krea2TurboV14"
-      ],
-      "fallbackAliases": ["krea2"],
-      "baseGroup": "krea2-base",
-      "baseGroupLabel": "Krea 2 base model",
-      "required": false,
-      "nsfw": true,
-      "downloadUrl": "https://civitai.com/api/download/models/3333138?fileId=3219464",
-      "pageUrl": "https://civitai.com/models/2416142?modelVersionId=3333138",
-      "size": 12829186855,
-      "sha256": "AFB9F7DB3122AD2BE63EF6A236B104566770DE1590F14693F452EF137BCF75A9",
-      "weightDtype": "default",
-      "textEncoder": "qwen3vl_4b_fp8_scaled.safetensors",
-      "textEncoderAliases": ["qwen3vl", "qwen3vl_4b", "qwen3vl_4b_fp8_scaled"],
-      "textEncoderTarget": "text_encoders",
-      "clipType": "krea2",
-      "vae": "qwen_image_vae.safetensors",
-      "vaeAliases": ["qwen_image_vae", "qwenimagevae"],
-      "vaeTarget": "vae",
-      "vram": "~8-10 GB",
-      "capabilities": ["t2i", "lora", "refine", "esrgan"],
-      "verified": true,
-      "tested": true,
-      "notes": "Reference path from Krea2_SNOFS_Freeze_v8. Uses UNETLoader + qwen3vl_4b_fp8_scaled (clip type krea2) + qwen_image_vae.",
-      "defaults": {
-        "steps": 12,
-        "cfg": 2.5,
-        "sampler": "euler",
-        "scheduler": "simple",
-        "denoise": 1.0
-      },
-      "ranges": {
-        "steps": {
-          "label": "Steps",
-          "min": 9,
-          "max": 16,
-          "default": 12,
-          "step": 1,
-          "recommendedMin": 10,
-          "recommendedMax": 14,
-          "hardMin": 1,
-          "hardMax": 100,
-          "unit": "steps",
-          "description": "Krea 2 Turbo is distilled; 10-14 steps covers the useful range. More steps add time without detail."
-        },
-        "cfg": {
-          "label": "CFG",
-          "min": 1.5,
-          "max": 5.0,
-          "default": 2.5,
-          "step": 0.1,
-          "recommendedMin": 2.0,
-          "recommendedMax": 3.0,
-          "hardMin": 0.0,
-          "hardMax": 30.0,
-          "unit": "",
-          "description": "2.0-3.0 follows the prompt; higher values increase contrast and can burn highlights."
-        },
-        "denoise": {
-          "label": "Denoise",
-          "min": 0.6,
-          "max": 1.0,
-          "default": 1.0,
-          "step": 0.01,
-          "recommendedMin": 0.9,
-          "recommendedMax": 1.0,
-          "hardMin": 0.0,
-          "hardMax": 1.0,
-          "unit": "",
-          "description": "Text-to-image from empty latent normally uses 1.0. Lower values only make sense for a partial re-render."
-        },
-        "width": {
-          "label": "Width",
-          "min": 512,
-          "max": 1536,
-          "default": 1024,
-          "step": 64,
-          "recommendedMin": 640,
-          "recommendedMax": 1536,
-          "hardMin": 256,
-          "hardMax": 4096,
-          "unit": "px",
-          "description": "Krea 2 working width. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
-        },
-        "height": {
-          "label": "Height",
-          "min": 512,
-          "max": 1536,
-          "default": 1024,
-          "step": 64,
-          "recommendedMin": 640,
-          "recommendedMax": 1536,
-          "hardMin": 256,
-          "hardMax": 4096,
-          "unit": "px",
-          "description": "Krea 2 working height. Auto-fit keeps both sides in the 640-1536 px band when possible; values outside it are warning-only."
-        },
-        "batch": {
-          "label": "Batch",
-          "min": 1,
-          "max": 4,
-          "default": 1,
-          "step": 1,
-          "recommendedMin": 1,
-          "recommendedMax": 2,
-          "hardMin": 1,
-          "hardMax": 8,
-          "unit": "images",
-          "description": "Each extra image is another full sampling pass. 1-2 is comfortable on 12 GB."
-        },
-        "seed": {
-          "label": "Seed",
-          "min": 0,
-          "max": 4294967295,
-          "default": 0,
-          "step": 1,
-          "recommendedMin": 0,
-          "recommendedMax": 4294967295,
-          "hardMin": 0,
-          "hardMax": 4294967295,
-          "unit": "",
-          "description": "Unlocked runs randomize this. Lock the seed to reproduce a result."
-        },
-        "refine": {
-          "steps": {
-            "label": "Refine steps",
-            "min": 4,
-            "max": 10,
-            "default": 6,
-            "step": 1,
-            "recommendedMin": 5,
-            "recommendedMax": 8,
-            "hardMin": 1,
-            "hardMax": 100,
-            "unit": "steps",
-            "description": "Refine pass at reduced denoise. Freeze v8 uses 6."
-          },
-          "cfg": {
-            "label": "Refine CFG",
-            "min": 1.5,
-            "max": 3.0,
-            "default": 2.0,
-            "step": 0.1,
-            "recommendedMin": 1.8,
-            "recommendedMax": 2.5,
-            "hardMin": 0.0,
-            "hardMax": 30.0,
-            "unit": "",
-            "description": "Refine CFG. Freeze v8 uses 2.0."
-          },
-          "denoise": {
-            "label": "Refine denoise",
-            "min": 0.3,
-            "max": 0.6,
-            "default": 0.45,
-            "step": 0.01,
-            "recommendedMin": 0.35,
-            "recommendedMax": 0.55,
-            "hardMin": 0.0,
-            "hardMax": 1.0,
-            "unit": "",
-            "description": "Low denoise preserves the base composition while adding detail. Freeze v8 uses 0.45."
-          },
-          "scale": {
-            "label": "Refine size",
-            "min": 1024,
-            "max": 2048,
-            "default": 1536,
-            "step": 64,
-            "recommendedMin": 1280,
-            "recommendedMax": 1792,
-            "hardMin": 512,
-            "hardMax": 4096,
-            "unit": "px",
-            "description": "Long side of the refined latent, preserving the base aspect ratio. Freeze v8 uses 1536."
-          }
-        }
-      }
-    },
     {
       "id": "krea2-turbo-q5",
       "catalogId": "model-krea2-turbo-q5-k-m",
@@ -215,10 +20,19 @@
         "q5_k_m",
         "q5"
       ],
-      "fallbackAliases": [],
+      "fallbackAliases": [
+        "krea2",
+        "krea 2",
+        "krea_2",
+        "krea-2",
+        "krea2turbo",
+        "krea-2turbo",
+        "krea_2_turbo",
+        "krea2turbov"
+      ],
       "baseGroup": "krea2-base",
-      "baseGroupLabel": "Krea 2 base model",
-      "required": false,
+      "baseGroupLabel": "Krea 2 Turbo base model",
+      "required": true,
       "nsfw": false,
       "downloadUrl": "https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q5_K_M.gguf",
       "pageUrl": "https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF",
@@ -226,56 +40,58 @@
       "sha256": "",
       "weightDtype": null,
       "textEncoder": "qwen3vl_4b_fp8_scaled.safetensors",
-      "textEncoderAliases": ["qwen3vl", "qwen3vl_4b", "qwen3vl_4b_fp8_scaled"],
+      "textEncoderAliases": [
+        "qwen3vl",
+        "qwen3vl_4b",
+        "qwen3vl_4b_fp8_scaled"
+      ],
       "textEncoderTarget": "text_encoders",
       "clipType": "krea2",
       "vae": "qwen_image_vae.safetensors",
-      "vaeAliases": ["qwen_image_vae", "qwenimagevae"],
+      "vaeAliases": [
+        "qwen_image_vae",
+        "qwenimagevae"
+      ],
       "vaeTarget": "vae",
       "vram": "~6-8 GB",
-      "capabilities": ["t2i", "lora", "refine", "esrgan"],
+      "capabilities": [
+        "t2i",
+        "lora",
+        "refine",
+        "esrgan"
+      ],
       "verified": true,
       "tested": true,
-      "notes": "Same Krea 2 recipe through UnetLoaderGGUF (ComfyUI-GGUF). Tested with the Q5_K_M GGUF base.",
-      "defaults": {
-        "steps": 12,
-        "cfg": 2.5,
-        "sampler": "euler",
-        "scheduler": "simple",
-        "denoise": 1.0
-      },
+      "notes": "Same Krea 2 recipe through UnetLoaderGGUF (ComfyUI-GGUF). Tested with the Q5_K_M GGUF base at 9 steps / CFG 2.0.",
       "ranges": {
         "steps": {
           "label": "Steps",
           "min": 9,
           "max": 16,
-          "default": 12,
           "step": 1,
-          "recommendedMin": 10,
+          "recommendedMin": 9,
           "recommendedMax": 14,
           "hardMin": 1,
           "hardMax": 100,
           "unit": "steps",
-          "description": "Krea 2 Turbo is distilled; 10-14 steps covers the useful range."
+          "description": "Krea 2 Turbo is distilled; 9-12 steps is the tested band. More steps add time without much detail."
         },
         "cfg": {
           "label": "CFG",
           "min": 1.5,
           "max": 5.0,
-          "default": 2.5,
           "step": 0.1,
-          "recommendedMin": 2.0,
-          "recommendedMax": 3.0,
+          "recommendedMin": 1.8,
+          "recommendedMax": 2.8,
           "hardMin": 0.0,
           "hardMax": 30.0,
           "unit": "",
-          "description": "2.0-3.0 follows the prompt; higher values increase contrast and can burn highlights."
+          "description": "2.0 is the tested default. 1.8-2.8 follows the prompt; higher values increase contrast and can burn highlights."
         },
         "denoise": {
           "label": "Denoise",
           "min": 0.6,
           "max": 1.0,
-          "default": 1.0,
           "step": 0.01,
           "recommendedMin": 0.9,
           "recommendedMax": 1.0,
@@ -288,7 +104,6 @@
           "label": "Width",
           "min": 512,
           "max": 1536,
-          "default": 1024,
           "step": 64,
           "recommendedMin": 640,
           "recommendedMax": 1536,
@@ -301,7 +116,6 @@
           "label": "Height",
           "min": 512,
           "max": 1536,
-          "default": 1024,
           "step": 64,
           "recommendedMin": 640,
           "recommendedMax": 1536,
@@ -314,7 +128,6 @@
           "label": "Batch",
           "min": 1,
           "max": 4,
-          "default": 1,
           "step": 1,
           "recommendedMin": 1,
           "recommendedMax": 2,
@@ -327,7 +140,6 @@
           "label": "Seed",
           "min": 0,
           "max": 4294967295,
-          "default": 0,
           "step": 1,
           "recommendedMin": 0,
           "recommendedMax": 4294967295,
@@ -341,7 +153,6 @@
             "label": "Refine steps",
             "min": 4,
             "max": 10,
-            "default": 6,
             "step": 1,
             "recommendedMin": 5,
             "recommendedMax": 8,
@@ -354,7 +165,6 @@
             "label": "Refine CFG",
             "min": 1.5,
             "max": 3.0,
-            "default": 2.0,
             "step": 0.1,
             "recommendedMin": 1.8,
             "recommendedMax": 2.5,
@@ -367,7 +177,6 @@
             "label": "Refine denoise",
             "min": 0.3,
             "max": 0.6,
-            "default": 0.45,
             "step": 0.01,
             "recommendedMin": 0.35,
             "recommendedMax": 0.55,
@@ -380,7 +189,6 @@
             "label": "Refine size",
             "min": 1024,
             "max": 2048,
-            "default": 1536,
             "step": 64,
             "recommendedMin": 1280,
             "recommendedMax": 1792,
@@ -390,7 +198,12 @@
             "description": "Long side of the refined latent, preserving the base aspect ratio. Freeze v8 uses 1536."
           }
         }
-      }
+      },
+      "excludeAliases": [
+        "snofs",
+        "sexnudes",
+        "snofssexnudesandother"
+      ]
     }
   ]
 }

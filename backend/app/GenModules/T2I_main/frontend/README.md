@@ -28,11 +28,16 @@ aliases); do not import from the backend folder at runtime. Reusable media viewi
 
 ## 1. Scope
 
-- Krea 2 Turbo: **SNOFS_Krea2** (int8) or **Krea2 Turbo Q5_K_M** (GGUF) as a one-of base
-  group; install either. Alias-based detection binds the real catalog filename, so a renamed
-  SNOFS or official `krea2` file still works.
+- Krea 2 Turbo: two packs share one graph. **Krea 2 Turbo** uses **Krea2 Turbo Q5_K_M**
+  (GGUF, 9 steps / CFG 2.0); **Krea 2 SNOFS** uses **SNOFS_Krea2** (int8, 12 steps / CFG 2.5).
+  Install the base for each pack you want. Alias-based detection binds the real catalog
+  filename, so a renamed SNOFS or generic `krea2` file still works. Picking a model from the
+  other pack reloads the catalog, ranges and defaults for that pack.
+- Each pack's generation defaults live in its own `defaults.json`; `models.json` holds
+  bindings/ranges only and the API workflow holds wiring only.
 - LoRA chain with per-LoRA strength and automatic trigger injection; NSFW LoRAs are tagged
-- latent refine (default) or optional 4x-UltraSharp, or no upscale
+- only the Realism Engine LoRA is enabled by default; other LoRAs start off
+- optional latent refine or 4x-UltraSharp; both start off by default
 - optional Ollama/ComfyUI prompt enhancement with preview/approve and an advanced custom
   system brief
 - batch 1–4, ratio presets, model-specific safe ranges
@@ -66,9 +71,9 @@ Job ids contain `#` (`#145`). Always call `encodeURIComponent(jobId)` before bui
 on mount and auto-open `frontend/src/components/content/ModuleSetupModal.vue` only when
 `ready === false`; `ready: null` means the user catalog is unavailable, not that every file is
 missing. A header **Setup** button reopens the modal and refreshes the check. The modal only
-reports files and opens links; it never downloads, installs, moves or deletes anything. A
-Q5-only install satisfies the `krea2-base` one-of group, and a stale saved model switches to an
-installed group sibling.
+reports files and opens links; it never downloads, installs, moves or deletes anything. Each
+pack's base is an optional one-of group, so a single installed base does not block readiness;
+a stale saved model switches to an installed model and its pack's ranges/defaults.
 
 The create request carries the complete resolved selection:
 

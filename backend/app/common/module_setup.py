@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.common.model_aliases import best_alias_match
+from app.common.model_aliases import best_alias_match, name_has_alias
 
 _ROLE_TARGETS = {
     "base": "unet",
@@ -61,17 +61,25 @@ def _match_entry(item: dict, entries: Iterable[dict]) -> dict | None:
     name = str(item.get("name") or "").strip()
     wanted_target = target.casefold()
     wanted_name = name.replace("\\", "/").casefold()
+    exclude = _string_list(item.get("excludeAliases"))
     exact: list[dict] = []
     for entry in entries:
         entry_name = str(entry.get("name") or "").replace("\\", "/").casefold()
         entry_target = str(entry.get("target") or "").casefold()
         if wanted_target and entry_target != wanted_target:
             continue
+        if exclude and name_has_alias(entry.get("name"), exclude):
+            continue
         if entry_name == wanted_name and entry.get("present") is not False:
             exact.append(entry)
     if exact:
         return exact[0]
-    return best_alias_match(entries, [*_string_list(item.get("aliases")), name], target=target)
+    return best_alias_match(
+        entries,
+        [*_string_list(item.get("aliases")), name],
+        target=target,
+        exclude_aliases=exclude,
+    )
 
 
 def _present(entry: dict | None) -> bool | None:
@@ -141,7 +149,11 @@ def _group_view(
         for entry in entries
         if not targets or str(entry.get("target") or "").casefold() in targets
     ]
-    group_match = best_alias_match(candidates, _string_list(raw.get("aliases")))
+    group_match = best_alias_match(
+        candidates,
+        _string_list(raw.get("aliases")),
+        exclude_aliases=_string_list(raw.get("excludeAliases")),
+    )
     present_count = sum(1 for item in items if item.get("present") is True)
     if not catalog_available:
         satisfied: bool | None = None
@@ -159,6 +171,7 @@ def _group_view(
         "why": str(raw.get("why") or ""),
         "nsfw": bool(raw.get("nsfw")),
         "aliases": _string_list(raw.get("aliases")),
+        "excludeAliases": _string_list(raw.get("excludeAliases")),
         "satisfied": satisfied,
         "presentCount": present_count,
         "matchedFile": matched_file,

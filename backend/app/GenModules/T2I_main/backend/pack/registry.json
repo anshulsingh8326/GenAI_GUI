@@ -4,8 +4,13 @@
   "packs": [
     {
       "id": "krea2",
-      "label": "Krea 2",
+      "label": "Krea 2 Turbo",
       "path": "packs/krea2"
+    },
+    {
+      "id": "krea2-snofs",
+      "label": "Krea 2 SNOFS",
+      "path": "packs/krea2-snofs"
     }
   ]
 }

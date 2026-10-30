@@ -89,6 +89,9 @@ export interface T2IModel {
   shortLabel: string
   family: string
   base: string
+  /** Pack that owns this model and its graph/defaults. */
+  packId: string
+  packLabel: string
   description: string
   loader: 'UNETLoader' | 'UnetLoaderGGUF'
   file: string
@@ -310,6 +313,13 @@ export interface T2ICatalogMeta {
 
 export interface T2ICatalog {
   ok: boolean
+  pack: {
+    id: string
+    label: string
+    description: string
+    nsfw: boolean
+    order: number
+  }
   recipe: T2IRecipe
   workflow: T2IWorkflowInfo
   models: T2IModel[]

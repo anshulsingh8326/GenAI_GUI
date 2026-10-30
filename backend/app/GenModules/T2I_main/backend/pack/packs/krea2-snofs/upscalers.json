@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "description": "T2I_main upscale paths. `latent` is the native Krea 2 refine pass; `esrgan` is the optional 4x-UltraSharp post-pass. `none` disables upscaling.",
+  "upscalers": [
+    {
+      "id": "none",
+      "label": "No upscale",
+      "shortLabel": "None",
+      "kind": "none",
+      "file": null,
+      "target": null,
+      "scaleFactor": 1,
+      "enabledByDefault": false,
+      "defaultValue": null,
+      "valueRange": null,
+      "t2i": true,
+      "verified": true,
+      "notes": "Decode the base latent at the requested size and save it directly."
+    },
+    {
+      "id": "latent-refine",
+      "label": "Latent refine (Krea 2 native)",
+      "shortLabel": "Latent refine",
+      "kind": "latent",
+      "file": null,
+      "target": null,
+      "scaleFactor": 1,
+      "enabledByDefault": true,
+      "defaultValue": 1536,
+      "valueRange": {
+        "label": "Refine size",
+        "min": 1024,
+        "max": 2048,
+        "default": 1536,
+        "step": 64,
+        "recommendedMin": 1280,
+        "recommendedMax": 1792,
+        "hardMin": 512,
+        "hardMax": 4096,
+        "unit": "px",
+        "description": "Long side of the refined latent. The model's refine.scale range is authoritative for this path."
+      },
+      "t2i": true,
+      "verified": true,
+      "notes": "Default Freeze v8 path: LatentUpscale (nearest-exact) to 1536 long side, then a 6-step / CFG 2.0 / denoise 0.45 refine pass."
+    },
+    {
+      "id": "4x-ultrasharp",
+      "label": "4x-UltraSharp (ESRGAN)",
+      "shortLabel": "4x-UltraSharp",
+      "kind": "esrgan",
+      "file": "4x-UltraSharp.pth",
+      "aliases": ["4x_ultrasharp", "ultrasharp"],
+      "target": "upscale_models",
+      "scaleFactor": 4,
+      "enabledByDefault": false,
+      "defaultValue": 2048,
+      "valueRange": {
+        "label": "Output size",
+        "min": 1024,
+        "max": 3072,
+        "default": 2048,
+        "step": 64,
+        "recommendedMin": 1536,
+        "recommendedMax": 2560,
+        "hardMin": 512,
+        "hardMax": 8192,
+        "unit": "px",
+        "description": "Long side after the 4x model. 4x-UltraSharp first produces 4x pixels, then ImageScale downsizes to this value. Keep it at or below 3072 on 12 GB."
+      },
+      "t2i": true,
+      "verified": true,
+      "tested": false,
+      "notes": "Optional ESRGAN block. This is an alternative to latent refine, not a second pass; the selected upscale path is one of none, latent refine or 4x-UltraSharp."
+    }
+  ]
+}

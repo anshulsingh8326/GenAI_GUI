@@ -64,7 +64,9 @@ backend/app/GenModules/<module-id>/
     pack/                       tracked, authoritative module JSON (optional)
       registry.json             pack ids, labels, paths, default pack
       packs/<pack-id>/          one family/recipe per folder
-        options.json            recipe, defaults, ratios, limits
+        pack.json               label, description, nsfw, order
+        defaults.json           the one editable generation-defaults file
+        options.json            recipe, ratios, sampler lists, limits
         models.json             model bindings, ranges, workflow/composer
         loras.json              optional LoRA catalog
         upscalers.json          optional upscaler catalog
@@ -92,10 +94,11 @@ frontend/src/
 
 `backend/app/GenModules/_template/` is the same shape, with a local placeholder
 renderer instead of an engine and a minimal `pack/options.json` for its
-defaults/choices. `T2I_main/` adds per-model ranges, `catalog.py`, and
+defaults/choices. `T2I_main/` splits generation defaults into
+`packs/<pack>/defaults.json`, adds per-model ranges, `catalog.py`, and
 `workflows.py` for the full ComfyUI path. A module with more than one model
 family uses `pack/registry.json` plus one folder per pack; a single-pack module
-may keep the four JSON files directly in `pack/`. Neither folder is auto-mounted:
+may keep the JSON files directly in `pack/`. Neither folder is auto-mounted:
 the backend router, Vue route, and sidebar item are explicit host edits (§3).
 
 End-to-end flow:
@@ -509,9 +512,25 @@ ones in `fallbackAliases`:
   `my_base_v2` whose parts all appear in the name.
 - Keep a generic `fallbackAliases` out of `aliases` when another model also
   matches the same family. Otherwise both models can claim one file and the UI
-  will show a misleading second match.
+  will show a misleading second match. Use `excludeAliases` on the broad model
+  to refuse files that belong to a more specific sibling pack:
+
+```json
+{
+  "fallbackAliases": ["my-family"],
+  "excludeAliases": ["variant-name", "variant-token"]
+}
+```
+
+- The excluded file stays untouched; it simply cannot satisfy this model. This
+  is how T2I_main keeps a generic Krea 2 file in the normal pack while `snofs`
+  files go to the SNOFS pack.
 - Alias matching applies to the base model, text encoder, VAE, LoRAs, and
   upscalers. Add `*Aliases` fields where the pack schema supports them.
+- The resolved loader follows the real filename: a `.gguf` base uses
+  `UnetLoaderGGUF`, and a `.safetensors`/`.sft`/`.ckpt` base uses `UNETLoader`.
+  A generic alias can therefore bind an official safetensors file without a
+  pack edit.
 - Catalog entries kept with `present: false` are history, not bindable files.
   They never hide an installed alias, and they never satisfy a one-of group.
 - If only one member of a `baseGroup` is installed, the backend selects that
@@ -604,30 +623,44 @@ check is a convenience, never a security or validity boundary.
 
 #### Defaults and ranges come from the pack
 
-Keep one authoritative JSON source; do not duplicate ranges in Vue. The starter
-shape is `_template/backend/pack/options.json`:
+Keep one authoritative JSON source; do not duplicate defaults in Vue. The
+starter (`_template`) keeps small UI defaults in
+`_template/backend/pack/options.json`. Engine-backed packs such as T2I_main keep
+**one editable `defaults.json` per pack** and leave `options.json` for choices:
+
+```text
+packs/<pack>/
+  defaults.json   modelId, ratio, size, batch, seed, sampling, refine,
+                  upscaler and the default LoRA chain
+  models.json     bindings plus safe ranges (no defaults needed)
+  options.json    recipe, ratios, sampler/scheduler lists, limits
+  workflows/*.api.json
+```
 
 ```json
 {
-  "defaults": { "width": 1024, "height": 1024, "batch": 1, "accent": "lavender" },
-  "size": {
-    "min": 256, "max": 2048, "step": 64,
-    "values": [512, 768, 1024, 1280, 1536]
-  },
-  "batch": { "min": 1, "max": 4, "step": 1 }
+  "modelId": "my-model",
+  "ratio": "1:1",
+  "size": 1024,
+  "batch": 1,
+  "sampling": { "steps": 9, "cfg": 2.0, "sampler": "euler", "scheduler": "simple", "denoise": 1.0 },
+  "refine": { "steps": 6, "cfg": 2.0, "denoise": 0.45, "scale": 1536 },
+  "upscaler": { "id": "latent-refine", "enabled": true, "value": 1536 },
+  "loraChain": [{ "id": "my-lora", "strength": 0.6, "on": true }]
 }
 ```
 
 Engine-backed modules add per-model runtime ranges in `pack/models.json`
-(T2I shape):
+(T2I shape). A range may omit `default`; the loader then takes it from
+`defaults.json`:
 
 ```json
 {
   "models": [{
     "id": "my-model",
     "ranges": {
-      "steps": { "label": "Steps", "min": 8, "max": 20, "default": 12, "step": 1 },
-      "cfg": { "label": "CFG", "min": 1.5, "max": 5.0, "default": 2.5, "step": 0.05 }
+      "steps": { "label": "Steps", "min": 8, "max": 20, "step": 1 },
+      "cfg": { "label": "CFG", "min": 1.5, "max": 5.0, "step": 0.05 }
     }
   }]
 }
@@ -638,6 +671,9 @@ Engine-backed modules add per-model runtime ranges in `pack/models.json`
   selects to only the returned values.
 - The same pack values drive backend validation. The frontend clamp is only for
   restoring a stale form; it tells the user when it adjusted something.
+- The workflow's literal sampler/size values are **not** defaults: the composer
+  rewrites them from `defaults.json` and the request. Do not edit the API
+  workflow to change a default.
 - The user model catalog supplies installed-file presence and labels, never
   module ranges.
 
@@ -651,14 +687,15 @@ pack/
   registry.json                 { "defaultPack": "krea2", "packs": [...] }
   packs/krea2/
     pack.json                   label, description, nsfw, order
+    defaults.json               9 steps / CFG 2.0, size, refine, upscaler, LoRA chain
     options.json                recipe.id, recipe.workflow, recipe.composer
     models.json                 model.packId is added by the loader
     workflows/krea2_t2i.api.json
-  packs/flux2/
+  packs/krea2-snofs/
     pack.json
-    options.json
+    defaults.json               12 steps / CFG 2.5, same graph
+    options.json                recipe.workflow may point at ../krea2/workflows/...
     models.json                 may override workflow/composer per model
-    workflows/flux2_t2i.api.json
 ```
 
 Rules:
@@ -667,13 +704,17 @@ Rules:
    owns the user-facing label, description, NSFW badge, and order; registry
    label is the fallback.
 2. Model ids are unique across all packs; the model selects its pack.
-3. Each pack owns its own API-format workflow. Never add another family's nodes
-   to the Krea graph or build a switch-node mega-graph.
+3. A pack owns its workflow. Sibling variants may deliberately share one
+   API-format graph by pointing `recipe.workflow` at a path inside
+   `backend/pack`; the loader rejects paths that escape that tree. Never add
+   another family's nodes to the Krea graph or build a switch-node mega-graph.
 4. `catalog.load_packs()` validates every pack; `pack_for_model()` resolves the
    selected model; `workflows.compose_t2i()` dispatches by `composer`.
 5. `requirements.json` stays at the module root and covers all packs. It is the
    download/setup manifest, not a per-pack file and not an installer. Set
-   `models[].pack` when a module has more than one pack.
+   `models[].pack` when a module has more than one pack, and give each base
+   group its own `pack`/`group` id. Use optional groups when packs are
+   alternatives so an uninstalled pack does not block readiness.
 6. A model may override `workflow` and `composer` in `models.json` when its
    loader or graph really differs; otherwise it inherits its pack's recipe.
 7. Packs share the module API, jobs, library, and page. Add a pack folder and
@@ -2205,7 +2246,7 @@ Its folder starts with `_`, so the capability registry ignores it.
 | `backend/api.py` | Thin router, error mapping, module-scoped routes | Rename router prefix; keep decorated shape |
 | `backend/schema.py` | Camel-case request model | Replace fields with your inputs |
 | `backend/service.py` | Catalog, normalization, runner, stages, library writes, delete/clear, stale-job reconciliation | Replace `_render_svg`; extend the pack/catalog; keep job/library/delete lifecycle |
-| `backend/pack/options.json` | Starter defaults, supported size values, batch range | Replace with your real pack; add `models.json` ranges when model-specific. Multi-family modules add `pack/registry.json` + `pack/packs/<id>/` |
+| `backend/pack/options.json` | Starter defaults, supported size values, batch range | Replace with your real pack. Engine-backed packs split generation defaults into `packs/<id>/defaults.json`; keep `models.json` for bindings/ranges. Multi-family modules add `pack/registry.json` + `pack/packs/<id>/` |
 | `manifest.json` | Identity and metadata | Update every field; `entrypoint` is `backend.api:router` |
 | `requirements.json` | Optional ComfyUI nodes/models | Module-level, covers every pack; add only if your engine needs them. The app does not install them |
 

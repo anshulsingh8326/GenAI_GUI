@@ -21,7 +21,7 @@ import struct
 from pathlib import Path
 
 from app.common import capabilities, settings_store
-from app.common.model_aliases import alias_score, best_alias_match
+from app.common.model_aliases import alias_score, best_alias_match, name_has_alias
 
 # Model categories the panel reports. Unknown/extra folders are ignored; the
 # list covers everything our modules reference today.
@@ -727,7 +727,11 @@ def _audit_block(
         if models_dir is not None:
             targets = {model["target"] for model in members if model.get("target")}
             for target in targets:
-                found = _find_file_for_aliases(models_dir / target, list(raw_group.get("aliases") or []))
+                found = _find_file_for_aliases(
+                    models_dir / target,
+                    list(raw_group.get("aliases") or []),
+                    list(raw_group.get("excludeAliases") or []),
+                )
                 if found:
                     matched_file = found.name
                     break
@@ -912,6 +916,9 @@ def _check_model(raw: object) -> dict:
     size = item.get("size", item.get("sizeBytes"))
     required = bool(item["required"]) if "required" in item else not bool(item.get("optional"))
     aliases = [str(alias).strip() for alias in (item.get("aliases") or []) if str(alias).strip()]
+    exclude_aliases = [
+        str(alias).strip() for alias in (item.get("excludeAliases") or []) if str(alias).strip()
+    ]
     return {
         "id": str(item.get("id") or name),
         "label": str(item.get("label") or name),
@@ -921,6 +928,7 @@ def _check_model(raw: object) -> dict:
         "pack": str(item.get("pack") or ""),
         "group": str(item.get("group") or ""),
         "aliases": aliases,
+        "excludeAliases": exclude_aliases,
         "sizeBytes": int(size) if isinstance(size, (int, float)) and size > 0 else None,
         "required": required,
         "optional": not required,
@@ -937,7 +945,11 @@ def _check_model(raw: object) -> dict:
     }
 
 
-def _find_file_for_aliases(folder: Path, aliases: list[str]) -> Path | None:
+def _find_file_for_aliases(
+    folder: Path,
+    aliases: list[str],
+    exclude_aliases: list[str] | None = None,
+) -> Path | None:
     if not aliases or not folder.is_dir():
         return None
     best: Path | None = None
@@ -945,6 +957,8 @@ def _find_file_for_aliases(folder: Path, aliases: list[str]) -> Path | None:
     try:
         for candidate in folder.rglob("*"):
             if not candidate.is_file():
+                continue
+            if exclude_aliases and name_has_alias(candidate.name, exclude_aliases):
                 continue
             score = alias_score(candidate.name, aliases)
             if score > best_score:
@@ -965,12 +979,15 @@ def _match_model(model: dict, models_dir: Path) -> None:
         return
     wanted = model["name"].replace("\\", "/").casefold()
     aliases = [*model.get("aliases", []), model["name"]]
+    exclude_aliases = model.get("excludeAliases") or []
     found: Path | None = None
     fallback: Path | None = None
     fallback_score = 0
     try:
         for candidate in folder.rglob("*"):
             if not candidate.is_file():
+                continue
+            if exclude_aliases and name_has_alias(candidate.name, exclude_aliases):
                 continue
             relative = candidate.relative_to(folder).as_posix().casefold()
             if relative == wanted or candidate.name.casefold() == wanted:
