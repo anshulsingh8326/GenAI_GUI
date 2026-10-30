@@ -1,5 +1,9 @@
 # GenAI GUI
 
+---
+## Watch the Tutorial video here : https://youtu.be/7OceFwRKMgQ
+---
+
 A local-first generative AI studio: **Vue 3 + TypeScript** frontend, **FastAPI** backend,
 **ComfyUI** as the image/video engine and **Ollama** for text. One process in production -
 the backend serves the built GUI and owns all state (settings, jobs, assets). An optional
@@ -262,3 +266,7 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
 | `tools/README.md` | setup checks, portable uv/Python/Node, frontend rebuild rules |
+
+
+---
+#OpenSourceHiggsfield Challenge
