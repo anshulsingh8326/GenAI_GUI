@@ -50,6 +50,7 @@
       "shortLabel": "4x-UltraSharp",
       "kind": "esrgan",
       "file": "4x-UltraSharp.pth",
+      "aliases": ["4x_ultrasharp", "ultrasharp"],
       "target": "upscale_models",
       "scaleFactor": 4,
       "enabledByDefault": false,

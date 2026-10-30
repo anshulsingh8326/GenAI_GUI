@@ -19,14 +19,16 @@ backend restarts, `resume_pending_jobs()` reattaches to the stored prompt id.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import secrets
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from app.common import settings_store
+from app.common import module_setup, settings_store
 from app.connectors import service as connectors
 from app.jobs import service as jobs
 from app.library import service as library
@@ -38,6 +40,9 @@ logger = logging.getLogger("uvicorn.error")
 
 MODULE_ID = "T2I_main"
 TAB_ID = "text-to-image"
+MODULE_DIR = Path(__file__).resolve().parent.parent
+REQUIREMENTS_FILE = MODULE_DIR / "requirements.json"
+MANIFEST_FILE = MODULE_DIR / "manifest.json"
 STAGE_DEFS = (
     ("enhance", "Enhance prompt"),
     ("compose", "Compose workflow"),
@@ -422,6 +427,7 @@ def _resolve_loras(
 def _resolve_upscaler(
     payload: T2IJobRequest,
     model: dict,
+    snapshot: dict,
     pack: dict,
     errors: list[dict],
     warnings: list[dict],
@@ -430,7 +436,8 @@ def _resolve_upscaler(
     defaults = options["defaults"].get("upscaler") or {}
     requested = payload.advanced.upscaler if payload.advanced else None
     upscaler_id = (requested.id if requested and requested.id else defaults.get("id")) or "none"
-    upscaler = pack["upscalers"].get(str(upscaler_id))
+    snapshot_upscalers = {str(item["id"]): item for item in snapshot.get("upscalers") or []}
+    upscaler = snapshot_upscalers.get(str(upscaler_id)) or pack["upscalers"].get(str(upscaler_id))
     if upscaler is None:
         errors.append(
             _issue(
@@ -808,7 +815,7 @@ def _normalize_request(payload: T2IJobRequest, pack: dict) -> dict:
 
     width, height, ratio_id, size = _resolve_size(payload, model_view, pack, errors, warnings)
     loras = _resolve_loras(payload, snapshot, model_view, pack, errors, warnings)
-    upscaler = _resolve_upscaler(payload, model_view, pack, errors, warnings)
+    upscaler = _resolve_upscaler(payload, model_view, snapshot, pack, errors, warnings)
 
     adv = payload.advanced
     steps_raw = adv.steps if adv else None
@@ -1784,6 +1791,37 @@ def pack_info() -> dict:
             "format": "comfyui-api",
         },
     }
+
+
+def setup_info() -> dict:
+    """Standardized first-open setup payload for the shared requirements modal.
+
+    It reports missing required files and source links only. There is no
+    download, install, move or delete action here or in the frontend.
+    """
+    try:
+        manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    pack_meta = [
+        {
+            "id": pack["id"],
+            "label": pack["label"],
+            "description": pack.get("description") or "",
+            "nsfw": bool(pack.get("nsfw")),
+            "order": int(pack.get("order") or 0),
+        }
+        for pack in catalog.load_packs().values()
+    ]
+    return module_setup.build_setup_payload(
+        requirements=module_setup.load_requirements(REQUIREMENTS_FILE),
+        packs=pack_meta,
+        catalog=catalog.load_user_catalog(),
+        module_id=MODULE_ID,
+        module_label=str(manifest.get("name") or MODULE_ID),
+        module_description=str(manifest.get("description") or ""),
+        module_nsfw=any(pack["nsfw"] for pack in pack_meta),
+    )
 
 
 def validate_payload(payload: T2IJobRequest) -> dict:

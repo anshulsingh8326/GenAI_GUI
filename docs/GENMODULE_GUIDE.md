@@ -17,6 +17,8 @@ shared contracts. If you have no prior module context, start from `_template`;
 do not infer contracts from `T2I_main`.
 
 The module README is a per-module contract, not a prerequisite for this guide.
+For a copy-paste agent prompt that points at this guide and the one-of/alias
+contract, use `docs/GENMODULE_PROMPT.md`.
 
 ---
 
@@ -392,10 +394,142 @@ fields. Treat the rest of the manifest as a contract with humans and future
 tooling, not as runtime wiring. `_template/manifest.json` is the complete
 starter example.
 
+#### `requirements.json` (module-owned content manifest)
+
 `requirements.json` is optional. Ship it only when the module needs ComfyUI
 custom nodes or model files; Settings → Engine content audits it read-only
-against the user's install. See `docs/COMFYUI_CONTENT.md` §2 for its schema.
-Delete the file when the module needs nothing.
+against the user's install and the module's `/setup` popup uses the same file.
+Delete the file when the module needs nothing. The full schema also lives in
+`docs/COMFYUI_CONTENT.md` §2.
+
+```json
+{
+  "schemaVersion": 2,
+  "module": {
+    "id": "My_module",
+    "label": "My Module",
+    "description": "What the user needs before the first run.",
+    "nsfw": false
+  },
+  "groups": [{
+    "id": "my-base-group",
+    "pack": "my-pack",
+    "label": "Base model",
+    "mode": "oneOf",
+    "required": true,
+    "aliases": ["my-family"],
+    "why": "Install one base model."
+  }],
+  "nodes": [{
+    "name": "ComfyUI-GGUF",
+    "repo": "https://github.com/city96/ComfyUI-GGUF",
+    "commit": "<40-char sha>",
+    "optional": false,
+    "why": "Loads the GGUF base."
+  }],
+  "models": [{
+    "id": "my-base-int8",
+    "pack": "my-pack",
+    "role": "base",
+    "label": "My Base",
+    "name": "my_base_int8.safetensors",
+    "target": "unet",
+    "aliases": ["my_base", "my-family"],
+    "required": false,
+    "group": "my-base-group",
+    "tested": true,
+    "nsfw": false,
+    "size": 12829186855,
+    "url": "https://example.com/my_base_int8.safetensors",
+    "pageUrl": "https://example.com/my-model",
+    "sha256": "<64 hex chars>",
+    "why": "One of the accepted base files."
+  }]
+}
+```
+
+Key rules:
+
+- `schemaVersion` is `2` for the grouped/alias-aware schema. Older files still
+  load, so a module without groups keeps working.
+- `module` is display metadata. `nsfw` adds a badge; it never hides a download.
+- `models[].pack` is the owning pack id. Use one pack or set it explicitly when
+  the module has several packs.
+- `models[].role` is `base`, `text_encoder`, `vae`, `lora`, `upscaler`, or a
+  module-specific role. `target` is the ComfyUI `models/<target>/` folder.
+- `models[].required` defaults to `true`; set it to `false` for optional files.
+  Do **not** mark one-of group members individually required.
+- `groups[].required: true` plus `mode: "oneOf"` makes the group required while
+  each member is optional. A satisfied group counts once; absent alternatives do
+  not create extra missing-file warnings.
+- `groups[].aliases` are a last-resort group match (for example a generic
+  `krea2` file). The setup payload reports the matched filename.
+- `models[].url` is a direct download when documented. `pageUrl` is the source
+  page. Either may be empty for an optional file with no tracked source; the
+  popup then says no URL is documented.
+- `tested` and `nsfw` are presentation/audit metadata. `size` is bytes.
+  `sha256` is optional metadata and is not hashed on every page view.
+- `nodes` keeps the existing installer contract (`name`, `repo`, `commit`,
+  `optional`, `why`, and optional `package`/`pip`).
+- Nothing in this file downloads, installs, moves, or deletes a file.
+
+#### Filename aliases
+
+The user catalog keeps the real downloaded filename. The module binds the real
+name into the graph; users never rename files to match a manifest.
+
+Resolution order for a model file:
+
+1. exact catalog id (`catalogId` in `pack/models.json`);
+2. exact target + filename, then exact filename;
+3. declared aliases (case- and separator-insensitive, extension-insensitive);
+4. a separately declared fallback alias, but only for a file no sibling model
+   already claimed by a specific alias.
+
+In `pack/models.json`, keep model-specific aliases in `aliases` and generic
+ones in `fallbackAliases`:
+
+```json
+{
+  "id": "my-base-int8",
+  "file": "my_base_int8.safetensors",
+  "target": "unet",
+  "aliases": ["my_base", "my-family", "my_base_v2"],
+  "fallbackAliases": ["my-family"],
+  "baseGroup": "my-base-group",
+  "baseGroupLabel": "My base model",
+  "required": false,
+  "nsfw": false,
+  "textEncoderAliases": ["my_encoder"],
+  "vaeAliases": ["my_vae"]
+}
+```
+
+- `aliases` match a normalized filename token or a multi-part alias such as
+  `my_base_v2` whose parts all appear in the name.
+- Keep a generic `fallbackAliases` out of `aliases` when another model also
+  matches the same family. Otherwise both models can claim one file and the UI
+  will show a misleading second match.
+- Alias matching applies to the base model, text encoder, VAE, LoRAs, and
+  upscalers. Add `*Aliases` fields where the pack schema supports them.
+- Catalog entries kept with `present: false` are history, not bindable files.
+  They never hide an installed alias, and they never satisfy a one-of group.
+- If only one member of a `baseGroup` is installed, the backend selects that
+  installed default and the frontend switches a stale saved model to it.
+
+#### First-open setup endpoint
+
+Engine-backed modules should expose `GET /setup` and build it with
+`app.common.module_setup.build_setup_payload` (pass the normalized
+`requirements.json`, pack metadata, and the user catalog). It returns the module
+and pack descriptions, groups, required/optional items, destinations, sizes,
+download/source links, NSFW flags, `missingRequired`, and `ready` (`null` when
+the catalog is unavailable). The shared `ModuleSetupModal.vue` renders it.
+
+`ready` is deliberately `null`, not `false`, when no user catalog exists: the app
+does not know which files are missing yet. Auto-open the modal only when
+`ready === false`; always provide a header **Setup** button so the user can
+reopen it.
 
 ### 4.2 Thin API router
 
@@ -408,6 +542,7 @@ Minimum route set for a generation module:
 | --- | --- | --- |
 | `GET` | `/catalog` | controls, ranges, defaults; engine snapshot when engine-backed |
 | `GET` | `/pack` | secret-free pack summary for debug/ops |
+| `GET` | `/setup` | engine-backed only: missing required files + links for the shared setup modal |
 | `POST` | `/validate` | validate/normalize without creating a job |
 | `POST` | `/jobs` | create and start a job |
 | `GET` | `/jobs?limit=` | module-scoped history, newest first |
@@ -416,10 +551,11 @@ Minimum route set for a generation module:
 | `DELETE` | `/jobs/{id}?deleteAssets=true\|false` | delete one terminal job |
 | `DELETE` | `/jobs?deleteAssets=true\|false` | clear this module's history |
 
-`_template` implements this set; its `/pack` returns the starter tracked pack
-summary, and its catalog has no engine snapshot because it is engine-free. T2I
-also exposes `POST /enhance` for prompt rewriting previews. Add module-specific
-routes as needed, but keep the generic job routes above.
+`_template` implements the generic set except `/setup`; its `/pack` returns the
+starter tracked pack summary, and its catalog has no engine snapshot because it
+is engine-free. T2I also exposes `POST /enhance` for prompt rewriting previews
+and `GET /setup` for its first-open model popup. Add module-specific routes as
+needed, but keep the generic job routes above.
 
 Job ids may contain `#` (for example `#145`). Every client must encode ids:
 
@@ -514,10 +650,12 @@ history, and API contract. Do **not** clone the module for Flux/Qwen/Krea.
 pack/
   registry.json                 { "defaultPack": "krea2", "packs": [...] }
   packs/krea2/
+    pack.json                   label, description, nsfw, order
     options.json                recipe.id, recipe.workflow, recipe.composer
     models.json                 model.packId is added by the loader
     workflows/krea2_t2i.api.json
   packs/flux2/
+    pack.json
     options.json
     models.json                 may override workflow/composer per model
     workflows/flux2_t2i.api.json
@@ -525,16 +663,23 @@ pack/
 
 Rules:
 
-1. The registry is the source of truth for pack id, label, path, and default.
+1. The registry is the source of truth for pack id, path, and default. `pack.json`
+   owns the user-facing label, description, NSFW badge, and order; registry
+   label is the fallback.
 2. Model ids are unique across all packs; the model selects its pack.
 3. Each pack owns its own API-format workflow. Never add another family's nodes
    to the Krea graph or build a switch-node mega-graph.
 4. `catalog.load_packs()` validates every pack; `pack_for_model()` resolves the
    selected model; `workflows.compose_t2i()` dispatches by `composer`.
 5. `requirements.json` stays at the module root and covers all packs. It is the
-   download manifest, not a per-pack file and not an installer.
+   download/setup manifest, not a per-pack file and not an installer. Set
+   `models[].pack` when a module has more than one pack.
 6. A model may override `workflow` and `composer` in `models.json` when its
    loader or graph really differs; otherwise it inherits its pack's recipe.
+7. Packs share the module API, jobs, library, and page. Add a pack folder and
+   registry entry; do not clone the GenModule for each family.
+8. Flux/Qwen-style packs are added only after their API graph and model bindings
+   are verified; keep unverified families out of the registry.
 
 ### 4.5 Jobs and stages
 
@@ -848,6 +993,45 @@ components.
 | `*Page.vue` | Layout, transient UI, composer, viewer owner | durable form state or backend calls |
 | `*SettingsPanel.vue` | Controls bound directly to the store, panel resets | job creation |
 | `*GenerationCard.vue` | One job's presentation, stages, result actions | global polling or catalog load |
+
+#### Shared module setup modal
+
+Engine-backed modules should reuse
+`frontend/src/components/content/ModuleSetupModal.vue` instead of building their
+own first-run dialog. The page owns only transient state:
+
+```ts
+const setupOpen = ref(false)
+const setupPayload = ref<ModuleSetupPayload | null>(null)
+const setupLoading = ref(false)
+const setupError = ref('')
+
+async function loadSetup(openWhenMissing = false): Promise<void> {
+  setupLoading.value = true
+  setupError.value = ''
+  try {
+    setupPayload.value = await api.getSetup()
+    if (openWhenMissing && setupPayload.value.ready === false) setupOpen.value = true
+  } catch (err) {
+    setupError.value = store.errorText(err)
+  } finally {
+    setupLoading.value = false
+  }
+}
+```
+
+- Fetch once on page mount and auto-open only when `ready === false`.
+- Keep a **Setup** header button that reopens the modal and refreshes the check.
+- The modal shows module/pack descriptions, missing required files and folders,
+  one-of groups and their members, an optional-files disclosure, direct
+  download/source links, sizes, and NSFW tags. It never downloads, installs,
+  moves, or deletes anything.
+- The shared contract lives in `frontend/src/types.ts`
+  (`ModuleSetupPayload`, `ModuleSetupPack`, `ModuleSetupGroup`,
+  `ModuleSetupItem`, `ModuleSetupMissingGroup`). Do not re-declare a private
+  copy in a module.
+- Add the canonical page/settings changes under the module's `frontend/` folder,
+  then copy them into `frontend/src/features/<nav-id>/` exactly as §3.5 says.
 
 ### 5.2 The store owns durable state
 

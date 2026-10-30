@@ -28,8 +28,10 @@ aliases); do not import from the backend folder at runtime. Reusable media viewi
 
 ## 1. Scope
 
-- Krea 2 Turbo (int8, or Q5 GGUF when installed)
-- LoRA chain with per-LoRA strength and automatic trigger injection
+- Krea 2 Turbo: **SNOFS_Krea2** (int8) or **Krea2 Turbo Q5_K_M** (GGUF) as a one-of base
+  group; install either. Alias-based detection binds the real catalog filename, so a renamed
+  SNOFS or official `krea2` file still works.
+- LoRA chain with per-LoRA strength and automatic trigger injection; NSFW LoRAs are tagged
 - latent refine (default) or optional 4x-UltraSharp, or no upscale
 - optional Ollama/ComfyUI prompt enhancement with preview/approve and an advanced custom
   system brief
@@ -46,6 +48,7 @@ All calls are same-origin under `/api/t2i`.
 | --- | --- | --- |
 | `GET` | `/catalog?modelId=` | models, LoRAs, upscalers, ratios, ranges, defaults, engine status |
 | `GET` | `/pack` | secret-free pack summary for debug/ops |
+| `GET` | `/setup` | missing required files/groups, destinations, links, tags for the setup modal |
 | `POST` | `/validate` | normalize/validate without creating a job |
 | `POST` | `/enhance` | prompt rewrite preview |
 | `POST` | `/jobs` | create and start a job |
@@ -56,6 +59,16 @@ All calls are same-origin under `/api/t2i`.
 | `DELETE` | `/jobs?deleteAssets=true\|false` | clear this module's whole chat; optionally trash all module results (default `false`) |
 
 Job ids contain `#` (`#145`). Always call `encodeURIComponent(jobId)` before building a URL.
+
+### First-open setup
+
+`GET /setup` returns the shared `ModuleSetupPayload` (see `frontend/src/types.ts`). Fetch it once
+on mount and auto-open `frontend/src/components/content/ModuleSetupModal.vue` only when
+`ready === false`; `ready: null` means the user catalog is unavailable, not that every file is
+missing. A header **Setup** button reopens the modal and refreshes the check. The modal only
+reports files and opens links; it never downloads, installs, moves or deletes anything. A
+Q5-only install satisfies the `krea2-base` one-of group, and a stale saved model switches to an
+installed group sibling.
 
 The create request carries the complete resolved selection:
 
@@ -169,6 +182,8 @@ Behaviour:
 2. Merge over pack defaults.
 3. After the catalog arrives, reconcile:
    - unknown model/ratio/sampler/scheduler/LoRA/upscaler → fallback;
+   - a saved model that is no longer installed → an installed base-group sibling, then any
+     installed model;
    - incompatible LoRAs dropped; `maxLoras` enforced;
    - stale sampling/refine/LoRA/upscale ranges clamped;
    - oversize batch/size clamped to the selected model;

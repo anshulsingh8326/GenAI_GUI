@@ -67,6 +67,24 @@ next to its `manifest.json`. Only modules that need engine content have one.
 
 ```json
 {
+  "schemaVersion": 2,
+  "module": {
+    "id": "My_module",
+    "label": "My Module",
+    "description": "Install one base plus the shared encoder and VAE.",
+    "nsfw": false
+  },
+  "groups": [
+    {
+      "id": "my-base-group",
+      "pack": "my-pack",
+      "label": "Base model",
+      "mode": "oneOf",
+      "required": true,
+      "aliases": ["my-family"],
+      "why": "Install one accepted base file."
+    }
+  ],
   "nodes": [
     {
       "name": "ComfyUI-Impact-Pack",
@@ -77,12 +95,22 @@ next to its `manifest.json`. Only modules that need engine content have one.
   ],
   "models": [
     {
-      "name": "krea2_turbo_int8.safetensors",
-      "target": "checkpoints",
-      "url": "https://huggingface.co/<org>/<repo>/resolve/main/krea2_turbo_int8.safetensors",
+      "id": "my-base-int8",
+      "pack": "my-pack",
+      "role": "base",
+      "label": "My Base",
+      "name": "my_base_int8.safetensors",
+      "target": "unet",
+      "aliases": ["my_base", "my-family"],
+      "required": false,
+      "group": "my-base-group",
+      "tested": true,
+      "nsfw": false,
+      "url": "https://huggingface.co/<org>/<repo>/resolve/main/my_base_int8.safetensors",
+      "pageUrl": "https://huggingface.co/<org>/<repo>",
       "sha256": "<64 hex chars>",
       "size": 4294967296,
-      "optional": false
+      "why": "One accepted base; install either this or the alternative."
     }
   ]
 }
@@ -90,6 +118,12 @@ next to its `manifest.json`. Only modules that need engine content have one.
 
 Field rules:
 
+- `schemaVersion: 2` adds groups, aliases, roles, pack ownership, tested/NSFW tags,
+  source pages, and `required`. Older `optional` manifests still load.
+- `module` is the setup popup's title/description/NSFW badge. It is display-only.
+- `groups[]` supports `mode: "oneOf"` (currently the only mode). A required group blocks
+  "Ready" only when **none** of its members is installed. Group `aliases` can satisfy the
+  group with a generic family file even when no member filename matches.
 - `nodes[].name` - display name; matching is by folder name (case-insensitive) **or** by
   normalized git origin (`repo`), whichever hits first.
 - `nodes[].commit` - **required for every git entry**: a full 40-character commit SHA
@@ -105,9 +139,20 @@ Field rules:
   `comfyui-manager>=4.2,<5`). Required for package entries that have no custom_nodes folder
   to clone; the installer uses the detected ComfyUI Python.
 - `models[].target` - the ComfyUI models category folder (`checkpoints`, `loras`, `vae`,
-  `text_encoders`, ...). `url`/`sha256`/`size` are required for Phase C downloads; Phase A
-  only needs `name` + `target` (+ `size` when known for the match check).
-- `optional: true` items are reported but never block "Ready".
+  `text_encoders`, ...). `url`/`size` are download metadata; `sha256` is verified only by an
+  explicit download/verify action, never on every page view.
+- `models[].required` defaults to `true`; `optional` is accepted as the inverse for old
+  manifests. Group members should set `required: false` and rely on the group.
+- `models[].aliases` match the real catalog filename after case, path, extension, and
+  separator normalization. A multi-part alias such as `snofs_krea2` also matches when each
+  part appears in the filename. Exact id/name still wins. Files are never renamed.
+- `models[].pack` assigns the item to a pack; `role` (`base`, `text_encoder`, `vae`, `lora`,
+  `upscaler`) selects the expected folder when `target` is omitted. `tested` and `nsfw`
+  drive labels/badges.
+- `models[].url` is a direct download if documented; `pageUrl` is the source page. Either
+  may be empty for optional files with no tracked public source.
+- Required/group warnings count a one-of base group **once**, not once per missing
+  alternative. A Q5-only install therefore reports zero missing bases.
 
 ### 2.2 Core baseline
 
@@ -161,13 +206,15 @@ hashes on top of this local layer.
 
 - `GET /api/comfyui/inspect?path=` - see §1. Read-only.
 - `GET /api/comfyui/requirements` - `{ inspect, core, modules[] }`; `core` and each module
-  list every required node/model with `installed: true | false | null` (`null` = no folder
-  configured, can't check), plus `missingNodes`, `missingModels`, `ready`. `core.checked` is
-  false when nothing could be audited.
-- Model matching: filename (case-insensitive) under `models/<target>/`; when the manifest
-  has a `size`, the audit also reports `sizeMatches` (mismatch = warning chip, never
-  auto-fixed). Hashing 6 GB files on every page view is not acceptable - **sha256 is
-  verified at download time** (Phase C) and via an explicit "Verify" action later.
+  list every required node/model and one-of group with `installed`/`satisfied:
+  true | false | null` (`null` = no folder configured, can't check), plus `missingNodes`,
+  `missingModels`, `ready`. `core.checked` is false when nothing could be audited.
+- Model matching: exact filename (case-insensitive) under `models/<target>/`, then
+  normalized aliases; the audit returns the real `resolvedName` to the module. Required
+  one-of groups count once and can be satisfied by a group alias. When the manifest has a
+  `size`, the audit also reports `sizeMatches` (mismatch = warning chip, never auto-fixed).
+  Hashing 6 GB files on every page view is not acceptable - **sha256 is verified at
+  download time** (Phase C) and via an explicit "Verify" action later.
 - GUI: Settings → **Engine content** tab - folder status card, **Core requirements** card,
   per-module node/model report, and **Models in this install** grouped by kind (header-derived
   `kind` / `arch`, LoRA `base` + `triggers`, misfiled-file warning). Empty state until

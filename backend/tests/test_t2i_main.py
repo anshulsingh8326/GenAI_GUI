@@ -21,6 +21,8 @@ from app.GenModules.T2I_main.backend import catalog, service, workflows
 from app.GenModules.T2I_main.backend.schema import T2IEnhanceRequest, T2IJobRequest
 from app.library import placeholders, service as library
 from app.common import settings_store
+from app.common.model_aliases import best_alias_match, normalize_token
+from app.engine_content import service as engine_service
 
 client = TestClient(app)
 
@@ -168,17 +170,25 @@ def test_composer_dispatch_is_model_scoped(monkeypatch) -> None:
 
 def test_snapshot_exposes_pack_identity() -> None:
     snapshot = catalog.build_snapshot(catalog.load_pack())
-    assert snapshot["pack"] == {"id": "krea2", "label": "Krea 2"}
+    assert snapshot["pack"]["id"] == "krea2"
+    assert snapshot["pack"]["label"] == "Krea 2"
+    assert snapshot["pack"]["description"]
+    assert snapshot["pack"]["nsfw"] is True
     model = next(item for item in snapshot["models"] if item["id"] == "krea2-turbo-int8")
     assert model["packId"] == "krea2"
     assert model["composer"] == "krea2"
+    assert model["label"] == "SNOFS_Krea2"
 
 
 def test_krea2_labels_and_wide_ratio_fit_band() -> None:
     pack = catalog.load_pack()
 
-    assert pack["models"]["krea2-turbo-int8"]["shortLabel"] == "SNOFS-Krea2_Q8"
-    assert pack["models"]["krea2-turbo-q5"]["shortLabel"] == "Krea2_Q5"
+    assert pack["models"]["krea2-turbo-int8"]["shortLabel"] == "SNOFS_Krea2"
+    assert pack["models"]["krea2-turbo-q5"]["shortLabel"] == "Krea2 Turbo Q5_K_M"
+    assert pack["models"]["krea2-turbo-q5"]["tested"] is True
+    assert pack["models"]["krea2-turbo-int8"]["nsfw"] is True
+    assert pack["models"]["krea2-turbo-q5"]["nsfw"] is False
+    assert pack["loras"]["lora-realism-engine-krea2-v3-1"]["nsfw"] is True
     assert [item["label"] for item in pack["options"]["ratios"]] == [
         "1:1 - Square",
         "4:5 - Portrait",
@@ -729,3 +739,207 @@ def test_clear_history_rejects_an_active_generation() -> None:
         jobs.delete_job(running["id"])
     assert info.value.errors[0]["code"] == "job_running"
     assert running["id"] in info.value.errors[0]["jobIds"]
+
+
+def _catalog_entry(
+    entry_id: str,
+    name: str,
+    target: str,
+    *,
+    present: bool = True,
+    triggers: list[str] | None = None,
+) -> dict:
+    return {
+        "id": entry_id,
+        "name": name,
+        "target": target,
+        "present": present,
+        "triggers": triggers or [],
+    }
+
+
+def _alias_shifted_catalog(*, base_name: str = "SNOFS_Krea2_Turbo_v14_int8.safetensors") -> dict:
+    return {
+        "available": True,
+        "models": {
+            "base": _catalog_entry("base", base_name, "unet"),
+            "clip": _catalog_entry("clip", "qwen3vl_4b_fp8_scaled_v2.safetensors", "text_encoders"),
+            "vae": _catalog_entry("vae", "qwen_image_vae_fp16.safetensors", "vae"),
+            "upscale": _catalog_entry("upscale", "4x_UltraSharp_v2.pth", "upscale_models"),
+        },
+        "loras": {
+            "lora-x": _catalog_entry(
+                "lora-x",
+                "xcreampiex_krea2_shifted.safetensors",
+                "loras",
+                triggers=["creampie"],
+            )
+        },
+        "source": {"comfyuiFolder": "C:/ComfyUI"},
+        "updatedAt": "2026-10-30T00:00:00Z",
+        "createdAt": "2026-10-30T00:00:00Z",
+    }
+
+
+def test_alias_matching_is_case_and_separator_insensitive() -> None:
+    assert normalize_token("Krea2_Turbo-Q5_K_M.gguf") == "krea2turboq5km"
+    entry = {"name": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors"}
+    assert best_alias_match([entry], ["SNOFS_Krea2", "snofs_krea2"]) is entry
+    assert best_alias_match([entry], ["q5_k_m"]) is None
+
+
+def test_snapshot_and_graph_bind_actual_aliased_filenames(monkeypatch: pytest.MonkeyPatch) -> None:
+    user = _alias_shifted_catalog()
+    monkeypatch.setattr(catalog, "load_user_catalog", lambda: user)
+    pack = catalog.load_pack()
+
+    snapshot = catalog.build_snapshot(pack)
+    model = next(item for item in snapshot["models"] if item["id"] == "krea2-turbo-int8")
+    assert model["declaredFile"] == "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors"
+    assert model["file"] == "SNOFS_Krea2_Turbo_v14_int8.safetensors"
+    assert model["textEncoder"] == "qwen3vl_4b_fp8_scaled_v2.safetensors"
+    assert model["vae"] == "qwen_image_vae_fp16.safetensors"
+    assert model["missing"] == []
+
+    request = _freeze_request(
+        loras=[
+            {
+                "id": "lora-xcreampiex-krea2-v1-1-000002500",
+                "strength": 1.0,
+                "on": True,
+            }
+        ],
+        advanced={"upscaler": {"id": "4x-ultrasharp", "enabled": True, "value": 2048}},
+    )
+    normalized = service._normalize_request(request, pack)
+    graph, _ = workflows.compose_t2i(pack, normalized["model"], normalized)
+
+    assert graph["1"]["inputs"]["unet_name"] == "SNOFS_Krea2_Turbo_v14_int8.safetensors"
+    assert graph["2"]["inputs"]["clip_name"] == "qwen3vl_4b_fp8_scaled_v2.safetensors"
+    assert graph["3"]["inputs"]["vae_name"] == "qwen_image_vae_fp16.safetensors"
+    assert graph["lora_1"]["inputs"]["lora_name"] == "xcreampiex_krea2_shifted.safetensors"
+    assert graph["upscale_model"]["inputs"]["model_name"] == "4x_UltraSharp_v2.pth"
+
+
+def test_q5_only_install_selects_q5_and_satisfies_the_base_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _alias_shifted_catalog(base_name="krea2_turbo-Q5_K_M_alt.gguf")
+    monkeypatch.setattr(catalog, "load_user_catalog", lambda: user)
+    pack = catalog.load_pack()
+
+    snapshot = catalog.build_snapshot(pack)
+    states = {item["id"]: item for item in snapshot["models"]}
+    assert states["krea2-turbo-int8"]["present"] is False
+    assert states["krea2-turbo-q5"]["present"] is True
+    assert states["krea2-turbo-q5"]["baseGroupSatisfied"] is True
+    assert snapshot["defaults"]["modelId"] == "krea2-turbo-q5"
+    assert not [
+        warning for warning in snapshot["warnings"] if warning["code"] == "model_group_missing"
+    ]
+
+
+def test_stale_exact_catalog_entry_does_not_hide_an_installed_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _alias_shifted_catalog()
+    user["models"]["stale"] = _catalog_entry(
+        "stale",
+        "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
+        "unet",
+        present=False,
+    )
+    monkeypatch.setattr(catalog, "load_user_catalog", lambda: user)
+
+    snapshot = catalog.build_snapshot(catalog.load_pack())
+    model = next(item for item in snapshot["models"] if item["id"] == "krea2-turbo-int8")
+    assert model["present"] is True
+    assert model["file"] == "SNOFS_Krea2_Turbo_v14_int8.safetensors"
+
+    setup = service.setup_info()
+    pack = setup["packs"][0]
+    base = next(item for item in pack["groups"][0]["items"] if item["id"] == "krea2-snofs-int8")
+    assert base["present"] is True
+    assert base["matchedFile"] == "SNOFS_Krea2_Turbo_v14_int8.safetensors"
+
+
+def test_generic_krea2_file_is_accepted_as_a_fallback_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _alias_shifted_catalog(base_name="Krea2_Turbo_v1.0_fp8.safetensors")
+    user["models"]["stale"] = _catalog_entry(
+        "stale",
+        "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
+        "unet",
+        present=False,
+    )
+    monkeypatch.setattr(catalog, "load_user_catalog", lambda: user)
+
+    snapshot = catalog.build_snapshot(catalog.load_pack())
+    states = {item["id"]: item for item in snapshot["models"]}
+    assert states["krea2-turbo-int8"]["present"] is True
+    assert states["krea2-turbo-int8"]["file"] == "Krea2_Turbo_v1.0_fp8.safetensors"
+    assert states["krea2-turbo-q5"]["present"] is False
+    assert snapshot["defaults"]["modelId"] == "krea2-turbo-int8"
+
+
+def test_setup_payload_reports_one_of_base_and_shared_required_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _alias_shifted_catalog(base_name="krea2_turbo-Q5_K_M_alt.gguf")
+    monkeypatch.setattr(catalog, "load_user_catalog", lambda: user)
+
+    payload = service.setup_info()
+    assert payload["ready"] is True
+    assert payload["policy"] == {
+        "autoDownload": False,
+        "autoInstall": False,
+        "note": "This popup only reports files and opens source links. Download and place them manually, then refresh the model catalog.",
+    }
+    pack = payload["packs"][0]
+    assert pack["id"] == "krea2"
+    assert pack["description"]
+    assert pack["groups"][0]["id"] == "krea2-base"
+    assert pack["groups"][0]["satisfied"] is True
+    assert pack["groups"][0]["matchedFile"] == "krea2_turbo-Q5_K_M_alt.gguf"
+    assert pack["groups"][0]["items"][0]["present"] is False
+    assert pack["groups"][0]["items"][1]["present"] is True
+    assert pack["missingRequired"] == []
+
+
+def test_setup_endpoint_returns_the_shared_contract() -> None:
+    response = client.get("/api/t2i/setup")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schemaVersion"] == 2
+    assert payload["module"]["id"] == "T2I_main"
+    assert payload["packs"][0]["id"] == "krea2"
+    assert payload["policy"]["autoDownload"] is False
+    assert payload["policy"]["autoInstall"] is False
+
+
+def test_engine_audit_counts_one_of_base_group_once(tmp_path) -> None:
+    requirements_path = catalog.PACK_DIR.parent.parent / "requirements.json"
+    raw = json.loads(requirements_path.read_text(encoding="utf-8"))
+    models_dir = tmp_path / "models"
+    for target in ("unet", "text_encoders", "vae", "loras", "upscale_models"):
+        (models_dir / target).mkdir(parents=True)
+    (models_dir / "unet" / "krea2_turbo-Q5_K_M_alt.gguf").write_bytes(b"gguf")
+    (models_dir / "text_encoders" / "qwen3vl_4b_fp8_scaled_v2.safetensors").write_bytes(b"clip")
+    (models_dir / "vae" / "qwen_image_vae_fp16.safetensors").write_bytes(b"vae")
+
+    nodes, models, groups, missing_nodes, missing_models = engine_service._audit_block(
+        raw, True, [], models_dir
+    )
+
+    assert nodes[0]["optional"] is True
+    assert missing_nodes == 0
+    assert missing_models == 0
+    assert groups[0]["id"] == "krea2-base"
+    assert groups[0]["satisfied"] is True
+    assert groups[0]["matchedFile"] == "krea2_turbo-Q5_K_M_alt.gguf"
+    q5 = next(item for item in models if item["id"] == "krea2-turbo-q5")
+    assert q5["installed"] is True
+    assert q5["resolvedName"] == "krea2_turbo-Q5_K_M_alt.gguf"
+    snofs = next(item for item in models if item["id"] == "krea2-snofs-int8")
+    assert snofs["installed"] is False

@@ -22,6 +22,7 @@ import type {
   T2IWarning,
   T2ICatalog,
   T2IApiErrorDetail,
+  ModuleSetupPayload,
 } from './types'
 
 const BASE = '/api/t2i'
@@ -145,6 +146,11 @@ export const t2iApi = {
   /** Secret-free pack summary for debug/ops screens. */
   getPack(signal?: AbortSignal): Promise<T2IPackInfo> {
     return request<T2IPackInfo>('/pack', { signal })
+  },
+
+  /** Missing required files + download links for the shared setup modal. */
+  getSetup(signal?: AbortSignal): Promise<ModuleSetupPayload> {
+    return request<ModuleSetupPayload>('/setup', { signal })
   },
 
   /** Validate without creating a job. */

@@ -8,26 +8,30 @@ content** to verify what the app can see.
 Links were checked on **2026-10-29**. Sizes are approximate; the linked page or
 repository is authoritative. Model licences apply to the downloaded weights.
 
-## Two configurations
+## Base-model choices
 
-The tracked `krea2` T2I_main pack supports two base files: **SNOFS_Krea2**
-(int8) and **Krea2 Turbo Q5_K_M** (GGUF). The official Comfy-Org FP8/INT8 files
-use different filenames and defaults, so they are **not interchangeable**
-without a pack update.
+The tracked `krea2` T2I_main pack supports two tested bases: **SNOFS_Krea2**
+(int8) and **Krea2 Turbo Q5_K_M** (GGUF). They are a **one-of group**: install
+either one, not both. The Text → Image setup popup treats the group as satisfied
+when either file is present.
 
-- **A. Current tracked pack.** Use one of the two tested bases in section A,
-  plus the shared text encoder, VAE and optional files. This runs with the
-  current pack without editing the module.
-- **B. Official Krea 2 Turbo (Comfy-Org FP8/INT8).** These are clean base
-  files, but using them in this app requires a pack/model update in the separate
-  GenModule session. They are not a drop-in replacement for section A.
+The official Comfy-Org FP8/INT8 files are also detected through the generic
+`krea2` fallback alias, so a renamed or official Krea 2 base no longer fails the
+file check. The pack still uses the SNOFS-tuned defaults, so the official file is
+a fallback rather than a separately tuned recipe.
 
-## A. Current tracked T2I_main pack
+- **A. Recommended.** Use one of the two tested bases in section A, plus the
+  shared text encoder, VAE and optional files. This runs with the current pack
+  without editing the module.
+- **B. Official Krea 2 Turbo (Comfy-Org FP8/INT8).** These are clean base files.
+  They are accepted as a generic `krea2` fallback, but their official defaults
+  differ from the tracked pack. Use section A for the tested path.
 
-The pack supports two tested base models. Download **one**; the text encoder,
-VAE and upscaler are shared. The SNOFS base and the Realism Engine LoRA are
-community/NSFW-oriented; they are labelled below. The other LoRAs in
-`requirements.json` are optional and are not linked here.
+## A. Recommended T2I_main files
+
+Download **one** base; the text encoder, VAE and upscaler are shared. The SNOFS
+base and the Realism Engine LoRA are community/NSFW-oriented; they are labelled
+below. Other LoRAs are optional and are not required for setup.
 
 | Model | File in ComfyUI | Folder | Source | Size |
 | --- | --- | --- | --- | --- |
@@ -43,22 +47,18 @@ want the smaller download; use SNOFS_Krea2 when you want the pack's reference
 path. The GGUF path uses ComfyUI-GGUF, which the setup installs as a required
 core node.
 
-Current audit limitation: `requirements.json` still marks SNOFS_Krea2 as
-required and Q5_K_M as optional, so a Q5-only install can show a missing
-required base until the GenModule update makes them alternatives. Both load and
-run.
+`requirements.json` declares both bases as optional members of the required
+`krea2-base` one-of group. A Q5-only install therefore shows the group as
+satisfied and selects Q5 as the default model.
 
 ### SNOFS_Krea2 file name and checksum
 
-Do **not** rename downloaded files. The Civitai download is named
-`snofsSexNudesAndOther_krea2TurboV14.safetensors`, while the current build still
-checks for `..._int8.safetensors`. The bytes are identical. The T2I_main
-GenModule update will match any name containing `snofs` as `SNOFS_Krea2`, so the
-downloaded name will work unchanged.
-
-Until that update lands, the GGUF base works with its current name, or use the
-exact `_int8` file if it is already present. Do not rename just to satisfy the
-old check; the alias fix is the intended solution.
+Do **not** rename downloaded files. The Civitai download may be named
+`snofsSexNudesAndOther_krea2TurboV14.safetensors` (without `_int8`), while the
+pack's canonical binding includes the suffix. The bytes are identical, and the
+module matches any filename containing the alias `snofs` (or
+`snofs_krea2`/`snofsSexNudesAndOther`) as **SNOFS_Krea2**. It binds the real
+catalog filename into the graph.
 
 SHA-256 of the Civitai file (must match):
 
@@ -81,11 +81,12 @@ If the other optional LoRAs are absent, the Text -> Image UI filters them out of
 the default chain after the model catalog is refreshed. You can also turn any
 remaining LoRA off in the LoRA panel.
 
-## B. Official Krea 2 Turbo (clean base; requires a pack update)
+## B. Official Krea 2 Turbo (clean base; generic fallback)
 
-These are the official/ComfyUI-repackaged Krea 2 files. They are the preferred
-base for a new public pack, but the tracked `krea2` pack does not reference
-these filenames yet.
+These are the official/ComfyUI-repackaged Krea 2 files. The tracked `krea2` pack
+detects them through its generic `krea2` fallback alias and binds the actual
+filename, but keeps the SNOFS-tuned defaults. A dedicated official recipe is
+still the better long-term path.
 
 | Role | File | Folder | Source | Size |
 | --- | --- | --- | --- | --- |
@@ -101,10 +102,10 @@ these filenames yet.
 - ComfyUI-ready repack and model card:
   <https://huggingface.co/Comfy-Org/Krea-2>.
 - Official Turbo defaults: **8 steps, CFG 0.0** (some ComfyUI templates use
-  CFG 1.0). The current SNOFS pack uses different defaults, so do not simply
-  rename the official file to the SNOFS filename.
-- To use this base in the app, update the pack's model binding, workflow
-  filename and sampler defaults in a separate GenModule session.
+  CFG 1.0). The current SNOFS pack uses different defaults, so the generic
+  fallback is functional but not tuned. Do not rename the file to a SNOFS name.
+- For an official-default recipe, add a separate model/pack entry with its own
+  workflow and sampler defaults in a GenModule development session.
 
 ### SFW realism LoRA candidates
 
@@ -139,8 +140,11 @@ After moving files:
 1. Restart ComfyUI if it was already running, so its model lists refresh.
 2. In this app, open **Settings -> Model catalog** and click **Refresh from
    ComfyUI** (or **Build from ComfyUI** if the catalog is empty).
-3. Open **Settings -> Engine content** and check that the required files are
-   present. Missing optional LoRAs are expected if you did not download them.
+3. Open **Text -> Image**. The setup popup checks required files, shows the
+   destination folder and opens source links. It never downloads or installs.
+   Use its **Refresh check** button after refreshing the model catalog.
+4. Open **Settings -> Engine content** for the full read-only audit. Missing
+   optional LoRAs are expected if you did not download them.
 
 The app only reads these files. It does not write, move or delete anything in
 the ComfyUI folder.

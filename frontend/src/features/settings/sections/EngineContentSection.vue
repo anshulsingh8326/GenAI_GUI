@@ -66,9 +66,17 @@ function nodeState(node: { installed: boolean | null; installedPath: string | nu
   return { tone: 'warn' as const, label: 'Missing' }
 }
 
-function modelState(model: { installed: boolean | null; sizeMatches: boolean | null }) {
+function modelState(model: {
+  installed: boolean | null
+  sizeMatches: boolean | null
+  optional?: boolean
+}) {
   if (model.installed === null) return { tone: 'neutral' as const, label: 'Not checked' }
-  if (!model.installed) return { tone: 'warn' as const, label: 'Missing' }
+  if (!model.installed) {
+    return model.optional
+      ? { tone: 'neutral' as const, label: 'Not installed' }
+      : { tone: 'warn' as const, label: 'Missing' }
+  }
   if (model.sizeMatches === false) return { tone: 'warn' as const, label: 'Size mismatch' }
   return { tone: 'ok' as const, label: 'Installed' }
 }

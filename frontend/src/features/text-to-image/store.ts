@@ -724,6 +724,22 @@ export const useT2IStore = defineStore('t2i', () => {
         mark()
       }
     }
+    if (model?.present === false) {
+      const fallback =
+        next.models.find((item) => item.id === next.defaults.modelId && item.present !== false) ??
+        next.models.find(
+          (item) =>
+            item.present === true &&
+            Boolean(model?.baseGroup) &&
+            item.baseGroup === model?.baseGroup,
+        ) ??
+        next.models.find((item) => item.present === true)
+      if (fallback) {
+        form.modelId = fallback.id
+        model = fallback
+        mark()
+      }
+    }
     if (!model) return changed
 
     if (!next.ratios.some((ratio) => ratio.id === form.ratio)) {

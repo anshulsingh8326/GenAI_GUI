@@ -2,6 +2,11 @@
 
 > Companion to `docs/PLAN.md`. Draft v0.1 · 2026-10-17
 > Answers: "How does my ComfyUI workflow actually run inside this GUI?"
+>
+> **Implementation note:** this is the early architecture sketch. The shipped
+> pack layout, `pack.json` metadata, alias matching and one-of groups are
+> documented in `docs/GENMODULE_GUIDE.md` §4.1 and §4.4, with the live example in
+> `backend/app/GenModules/T2I_main/backend/pack/`.
 
 ---
 

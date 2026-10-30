@@ -131,6 +131,7 @@ Mounted by `app/api/__init__.py`; implementation in
 | --- | --- | --- |
 | GET | `/api/t2i/catalog` | models, LoRAs, upscalers, text models, ranges, defaults, presets, engine status, warnings |
 | GET | `/api/t2i/pack` | tracked pack summary (recipe, workflow, ids, node count) |
+| GET | `/api/t2i/setup` | missing required files, one-of groups, folders and links for the setup modal |
 | POST | `/api/t2i/validate` | validate + normalize without creating a job |
 | POST | `/api/t2i/enhance` | Ollama/ComfyUI prompt enhancement preview (no job) |
 | POST | `/api/t2i/jobs` | validate, persist and start a real generation job |
