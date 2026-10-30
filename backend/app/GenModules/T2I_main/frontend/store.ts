@@ -724,6 +724,22 @@ export const useT2IStore = defineStore('t2i', () => {
         mark()
       }
     }
+    if (model?.present === false) {
+      const fallback =
+        next.models.find((item) => item.id === next.defaults.modelId && item.present !== false) ??
+        next.models.find(
+          (item) =>
+            item.present === true &&
+            Boolean(model?.baseGroup) &&
+            item.baseGroup === model?.baseGroup,
+        ) ??
+        next.models.find((item) => item.present === true)
+      if (fallback) {
+        form.modelId = fallback.id
+        model = fallback
+        mark()
+      }
+    }
     if (!model) return changed
 
     if (!next.ratios.some((ratio) => ratio.id === form.ratio)) {
@@ -863,14 +879,28 @@ export const useT2IStore = defineStore('t2i', () => {
     loading.value = false
   }
 
-  async function loadCatalog(): Promise<void> {
+  async function loadCatalog(modelId: string | null = null): Promise<void> {
     catalogAbort?.abort()
     catalogAbort = new AbortController()
     if (!catalog.value) loading.value = true
     loadError.value = ''
     try {
-      const next = await t2iApi.getCatalog(null, catalogAbort.signal)
+      let next = await t2iApi.getCatalog(modelId, catalogAbort.signal)
+      // The first snapshot lists every pack's models, but the active pack is
+      // still the registry default. Restore the saved/current model's own pack
+      // before applying defaults so a SNOFS session reopens on SNOFS ranges,
+      // LoRAs and sampling defaults.
+      if (!modelId) {
+        const current = next.models.find((item) => item.id === form.modelId)
+        if (current?.packId && current.packId !== next.pack?.id) {
+          next = await t2iApi.getCatalog(current.id, catalogAbort.signal)
+        }
+      }
       applyCatalog(next)
+      if (modelId) {
+        form.modelId = modelId
+        applyModelDefaults(next)
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       if (err instanceof Error && err.name === 'AbortError') return
@@ -915,9 +945,17 @@ export const useT2IStore = defineStore('t2i', () => {
     ui.toast(`Fitted ${ratio.id} to ${fitted.width}x${fitted.height}px.`, 'info')
   }
 
-  function onModelChange(): void {
+  async function onModelChange(): Promise<void> {
     const next = catalog.value
     if (!next) return
+    const picked = next.models.find((item) => item.id === form.modelId)
+    if (picked?.packId && picked.packId !== next.pack?.id) {
+      await loadCatalog(picked.id)
+      if (form.modelId === picked.id) {
+        ui.toast(`Applied ${selectedModel.value?.shortLabel ?? 'model'} defaults.`, 'info')
+      }
+      return
+    }
     applyModelDefaults(next)
     ui.toast(`Applied ${selectedModel.value?.shortLabel ?? 'model'} defaults.`, 'info')
   }

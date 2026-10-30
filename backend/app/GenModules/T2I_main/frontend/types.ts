@@ -75,6 +75,7 @@ export interface T2IModelRanges {
 export interface T2IComponentState {
   role: string
   name: string
+  declaredName: string
   target: string
   /** true/false when the user catalog knows; null when presence is unknown. */
   present: boolean | null
@@ -88,15 +89,33 @@ export interface T2IModel {
   shortLabel: string
   family: string
   base: string
+  /** Pack that owns this model and its graph/defaults. */
+  packId: string
+  packLabel: string
   description: string
   loader: 'UNETLoader' | 'UnetLoaderGGUF'
   file: string
+  declaredFile: string
   target: string
+  aliases: string[]
+  fallbackAliases: string[]
+  baseGroup: string
+  baseGroupLabel: string
+  required: boolean
+  nsfw: boolean
+  downloadUrl: string
+  pageUrl: string
+  size: number | null
+  sha256: string
   weightDtype?: string | null
   textEncoder: string
+  declaredTextEncoder: string
+  textEncoderAliases: string[]
   textEncoderTarget: string
   clipType: string
   vae: string
+  declaredVae: string
+  vaeAliases: string[]
   vaeTarget: string
   vram: string
   capabilities: string[]
@@ -110,6 +129,7 @@ export interface T2IModel {
   /** False when any required component is known to be missing. */
   ready: boolean
   missing: string[]
+  baseGroupSatisfied?: boolean | null
   components: T2IComponentState[]
   catalogIdFound: string
   compatibleLoras: string[]
@@ -121,6 +141,9 @@ export interface T2ILora {
   id: string
   label: string
   file: string
+  declaredFile: string
+  aliases: string[]
+  nsfw: boolean
   base: string
   compatibleBases: string[]
   family: string
@@ -148,6 +171,8 @@ export interface T2IUpscaler {
   shortLabel: string
   kind: T2IUpscalerKind
   file: string | null
+  declaredFile?: string | null
+  aliases?: string[]
   target: string | null
   scaleFactor: number
   enabledByDefault: boolean
@@ -288,6 +313,13 @@ export interface T2ICatalogMeta {
 
 export interface T2ICatalog {
   ok: boolean
+  pack: {
+    id: string
+    label: string
+    description: string
+    nsfw: boolean
+    order: number
+  }
   recipe: T2IRecipe
   workflow: T2IWorkflowInfo
   models: T2IModel[]
@@ -648,3 +680,12 @@ export interface T2IApiErrorDetail {
   errors?: T2IValidationIssue[]
   warnings?: T2IWarning[]
 }
+
+/** Shared first-open setup contract; the same types drive other GenModules. */
+export type {
+  ModuleSetupGroup,
+  ModuleSetupItem,
+  ModuleSetupMissingGroup,
+  ModuleSetupPack,
+  ModuleSetupPayload,
+} from '@/types'

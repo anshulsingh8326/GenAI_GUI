@@ -29,13 +29,24 @@ const hasUsableUpscaler = computed(() =>
   ),
 )
 
-const modelOptions = computed(() =>
-  (catalog.value?.models ?? []).map((item) => ({
-    value: item.id,
-    label: item.present === false ? `${item.shortLabel} (missing)` : item.shortLabel,
-    disabled: item.present === false,
-  })),
-)
+const modelOptions = computed(() => {
+  const models = catalog.value?.models ?? []
+  const showPack = new Set(models.map((item) => item.packId)).size > 1
+  return models.map((item) => {
+    const tags: string[] = []
+    if (item.nsfw) tags.push('NSFW')
+    if (item.present === false) {
+      const missing = item.baseGroupSatisfied === false || item.required !== false
+      tags.push(missing ? 'missing' : 'optional, not installed')
+    }
+    const name = showPack ? `${item.shortLabel} · ${item.packLabel}` : item.shortLabel
+    return {
+      value: item.id,
+      label: tags.length ? `${name} (${tags.join(', ')})` : name,
+      disabled: item.present === false,
+    }
+  })
+})
 
 const ratioOptions = computed(() =>
   (catalog.value?.ratios ?? []).map((item) => ({ value: item.id, label: item.label })),
@@ -264,7 +275,15 @@ function resetAll(): void {
           </label>
           <p v-if="model" class="text-[10px] leading-snug text-muted">
             {{ model.description || model.family }} · {{ model.vram }}
-            <span v-if="model.present === false" class="text-danger"> · model file missing</span>
+            <span v-if="model.nsfw" class="font-medium text-warn">(NSFW)</span>
+            <span v-if="model.present === false" class="text-danger">
+              ·
+              {{
+                model.baseGroupSatisfied === false || model.required !== false
+                  ? 'model file missing'
+                  : 'optional model, not installed'
+              }}
+            </span>
           </p>
 
           <div class="grid grid-cols-2 gap-2">
@@ -499,7 +518,10 @@ function resetAll(): void {
                 @update:model-value="toggleLora(row.lora.id, $event)"
               />
               <div class="min-w-0 flex-1">
-                <p class="truncate text-xs font-medium">{{ row.lora.label }}</p>
+                <p class="truncate text-xs font-medium">
+                  {{ row.lora.label }}
+                  <span v-if="row.lora.nsfw" class="font-medium text-warn">(NSFW)</span>
+                </p>
                 <p class="truncate text-[10px] text-muted">
                   {{ row.lora.type || row.lora.base }}
                   <span v-if="row.lora.triggers.length"> · {{ row.lora.triggers.join(', ') }}</span>

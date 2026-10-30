@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "krea2-snofs",
+  "label": "Krea 2 SNOFS",
+  "description": "SNOFS Krea 2 Turbo V14 int8 reference model using the same Krea 2 graph, with its own 12-step / CFG 2.5 defaults.",
+  "nsfw": true,
+  "order": 11
+}

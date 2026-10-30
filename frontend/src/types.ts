@@ -400,19 +400,46 @@ export interface ComfyRequirementNode {
 }
 
 export interface ComfyRequirementModel {
+  id?: string
+  label?: string
   name: string
   target: string
+  role?: string
+  pack?: string
+  group?: string
+  aliases?: string[]
   sizeBytes: number | null
+  required?: boolean
   optional: boolean
+  tested?: boolean
+  nsfw?: boolean
+  url?: string
+  pageUrl?: string
+  sha256?: string
   why: string
   installed: boolean | null
   path: string | null
+  resolvedName?: string | null
   sizeMatches: boolean | null
+}
+
+export interface ComfyRequirementGroup {
+  id: string
+  label: string
+  pack: string
+  mode: string
+  required: boolean
+  satisfied: boolean | null
+  presentCount: number
+  matchedFile: string
+  items: string[]
+  why: string
 }
 
 export interface ComfyCoreRequirements {
   nodes: ComfyRequirementNode[]
   models: ComfyRequirementModel[]
+  groups: ComfyRequirementGroup[]
   missingNodes: number
   missingModels: number
   /** false = no ComfyUI folder configured, nothing could be checked */
@@ -425,12 +452,104 @@ export interface ComfyModuleRequirements {
   name: string
   nodes: ComfyRequirementNode[]
   models: ComfyRequirementModel[]
+  groups: ComfyRequirementGroup[]
   missingNodes: number
   missingModels: number
   /** false = no ComfyUI folder configured, nothing could be checked */
   checked: boolean
   ready: boolean
   error: string | null
+}
+
+/** Standard setup payload for the shared first-open ModuleSetupModal. */
+export interface ModuleSetupItem {
+  kind?: 'model'
+  id: string
+  pack: string
+  group: string | null
+  role: string
+  label: string
+  name: string
+  aliases: string[]
+  target: string
+  folder: string
+  destination: string
+  required: boolean
+  tested: boolean
+  nsfw: boolean
+  size: number | null
+  url: string
+  pageUrl: string
+  sha256: string
+  why: string
+  present: boolean | null
+  matchedFile: string
+}
+
+export interface ModuleSetupGroup {
+  id: string
+  pack: string
+  label: string
+  mode: string
+  required: boolean
+  why: string
+  nsfw: boolean
+  aliases: string[]
+  satisfied: boolean | null
+  presentCount: number
+  matchedFile: string
+  items: ModuleSetupItem[]
+}
+
+export interface ModuleSetupPack {
+  id: string
+  label: string
+  description: string
+  nsfw: boolean
+  order: number
+  groups: ModuleSetupGroup[]
+  items: ModuleSetupItem[]
+  missingRequired: Array<ModuleSetupItem | ModuleSetupMissingGroup>
+  ready: boolean | null
+}
+
+export interface ModuleSetupMissingGroup {
+  kind: 'group'
+  id: string
+  pack: string
+  label: string
+  mode: string
+  target: string
+  folder: string
+  url: string
+  nsfw: boolean
+  items: ModuleSetupItem[]
+}
+
+export interface ModuleSetupPayload {
+  ok: boolean
+  schemaVersion: number
+  module: {
+    id: string
+    label: string
+    description: string
+    nsfw: boolean
+  }
+  packs: ModuleSetupPack[]
+  missingRequired: Array<ModuleSetupItem | ModuleSetupMissingGroup>
+  ready: boolean | null
+  catalog: {
+    available: boolean
+    updatedAt: string | null
+    createdAt: string | null
+    error: string | null
+    modelsRoot: string
+  }
+  policy: {
+    autoDownload: boolean
+    autoInstall: boolean
+    note: string
+  }
 }
 
 export interface ComfyRequirements {

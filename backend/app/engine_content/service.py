@@ -21,6 +21,7 @@ import struct
 from pathlib import Path
 
 from app.common import capabilities, settings_store
+from app.common.model_aliases import alias_score, best_alias_match, name_has_alias
 
 # Model categories the panel reports. Unknown/extra folders are ignored; the
 # list covers everything our modules reference today.
@@ -696,9 +697,10 @@ def _audit_block(
     installed_nodes: list[dict],
     models_dir: Path | None,
     package_dirs: list[Path] | None = None,
-) -> tuple[list[dict], list[dict], int, int]:
+) -> tuple[list[dict], list[dict], list[dict], int, int]:
     raw_nodes = raw.get("nodes") if isinstance(raw, dict) else None
     raw_models = raw.get("models") if isinstance(raw, dict) else None
+    raw_groups = raw.get("groups") if isinstance(raw, dict) else None
     nodes = [_check_node(item) for item in raw_nodes] if isinstance(raw_nodes, list) else []
     models = [_check_model(item) for item in raw_models] if isinstance(raw_models, list) else []
 
@@ -710,9 +712,56 @@ def _audit_block(
         if models_dir is not None:
             _match_model(model, models_dir)
 
+    groups: list[dict] = []
+    grouped_ids: set[str] = set()
+    for raw_group in raw_groups if isinstance(raw_groups, list) else []:
+        if not isinstance(raw_group, dict) or not raw_group.get("id"):
+            continue
+        group_id = str(raw_group["id"])
+        members = [model for model in models if model.get("group") == group_id]
+        if not members:
+            continue
+        grouped_ids.update(model["id"] for model in members)
+        present_count = sum(1 for model in members if model["installed"] is True)
+        matched_file = ""
+        if models_dir is not None:
+            targets = {model["target"] for model in members if model.get("target")}
+            for target in targets:
+                found = _find_file_for_aliases(
+                    models_dir / target,
+                    list(raw_group.get("aliases") or []),
+                    list(raw_group.get("excludeAliases") or []),
+                )
+                if found:
+                    matched_file = found.name
+                    break
+        if models_dir is None or not valid:
+            satisfied: bool | None = None
+        else:
+            satisfied = present_count > 0 or bool(matched_file)
+        groups.append(
+            {
+                "id": group_id,
+                "label": str(raw_group.get("label") or group_id),
+                "pack": str(raw_group.get("pack") or ""),
+                "mode": str(raw_group.get("mode") or "oneOf"),
+                "required": bool(raw_group.get("required", True)),
+                "satisfied": satisfied,
+                "presentCount": present_count,
+                "matchedFile": matched_file,
+                "items": [model["id"] for model in members],
+                "why": str(raw_group.get("why") or ""),
+            }
+        )
+
     missing_nodes = sum(1 for node in nodes if node["installed"] is False and not node["optional"])
-    missing_models = sum(1 for model in models if model["installed"] is False and not model["optional"])
-    return nodes, models, missing_nodes, missing_models
+    missing_models = sum(
+        1
+        for model in models
+        if model["id"] not in grouped_ids and model["installed"] is False and not model["optional"]
+    )
+    missing_models += sum(1 for group in groups if group["required"] and group["satisfied"] is False)
+    return nodes, models, groups, missing_nodes, missing_models
 
 
 def requirements() -> dict:
@@ -723,12 +772,13 @@ def requirements() -> dict:
     models_dir = Path(report["modelsDir"]) if report.get("modelsDir") else None
     package_dirs = _site_packages_dirs(report.get("pythonPath"))
 
-    core_nodes, core_models, core_missing_nodes, core_missing_models = _audit_block(
+    core_nodes, core_models, core_groups, core_missing_nodes, core_missing_models = _audit_block(
         _load_core(), valid, installed_nodes, models_dir, package_dirs
     )
     core = {
         "nodes": core_nodes,
         "models": core_models,
+        "groups": core_groups,
         "missingNodes": core_missing_nodes,
         "missingModels": core_missing_models,
         "checked": valid,
@@ -746,6 +796,7 @@ def requirements() -> dict:
                     "name": _module_name(folder),
                     "nodes": [],
                     "models": [],
+                    "groups": [],
                     "missingNodes": 0,
                     "missingModels": 0,
                     "checked": valid,
@@ -755,7 +806,7 @@ def requirements() -> dict:
             )
             continue
 
-        nodes, models, missing_nodes, missing_models = _audit_block(
+        nodes, models, groups, missing_nodes, missing_models = _audit_block(
             raw, valid, installed_nodes, models_dir, package_dirs
         )
         modules.append(
@@ -764,6 +815,7 @@ def requirements() -> dict:
                 "name": _module_name(folder),
                 "nodes": nodes,
                 "models": models,
+                "groups": groups,
                 "missingNodes": missing_nodes,
                 "missingModels": missing_models,
                 "checked": valid,
@@ -861,17 +913,60 @@ def _check_model(raw: object) -> dict:
     item = raw if isinstance(raw, dict) else {}
     name = str(item.get("name") or item.get("file") or "").strip()
     target = str(item.get("target") or "checkpoints").strip()
-    size = item.get("size")
+    size = item.get("size", item.get("sizeBytes"))
+    required = bool(item["required"]) if "required" in item else not bool(item.get("optional"))
+    aliases = [str(alias).strip() for alias in (item.get("aliases") or []) if str(alias).strip()]
+    exclude_aliases = [
+        str(alias).strip() for alias in (item.get("excludeAliases") or []) if str(alias).strip()
+    ]
     return {
+        "id": str(item.get("id") or name),
+        "label": str(item.get("label") or name),
         "name": name,
         "target": target,
+        "role": str(item.get("role") or ""),
+        "pack": str(item.get("pack") or ""),
+        "group": str(item.get("group") or ""),
+        "aliases": aliases,
+        "excludeAliases": exclude_aliases,
         "sizeBytes": int(size) if isinstance(size, (int, float)) and size > 0 else None,
-        "optional": bool(item.get("optional")),
+        "required": required,
+        "optional": not required,
+        "tested": bool(item.get("tested")),
+        "nsfw": bool(item.get("nsfw")),
+        "url": str(item.get("url") or ""),
+        "pageUrl": str(item.get("pageUrl") or ""),
+        "sha256": str(item.get("sha256") or ""),
         "why": str(item.get("why") or ""),
         "installed": None,
         "path": None,
+        "resolvedName": None,
         "sizeMatches": None,
     }
+
+
+def _find_file_for_aliases(
+    folder: Path,
+    aliases: list[str],
+    exclude_aliases: list[str] | None = None,
+) -> Path | None:
+    if not aliases or not folder.is_dir():
+        return None
+    best: Path | None = None
+    best_score = 0
+    try:
+        for candidate in folder.rglob("*"):
+            if not candidate.is_file():
+                continue
+            if exclude_aliases and name_has_alias(candidate.name, exclude_aliases):
+                continue
+            score = alias_score(candidate.name, aliases)
+            if score > best_score:
+                best = candidate
+                best_score = score
+    except OSError:
+        return None
+    return best
 
 
 def _match_model(model: dict, models_dir: Path) -> None:
@@ -882,17 +977,39 @@ def _match_model(model: dict, models_dir: Path) -> None:
     model["installed"] = False
     if not folder.is_dir():
         return
-    wanted = model["name"].lower()
+    wanted = model["name"].replace("\\", "/").casefold()
+    aliases = [*model.get("aliases", []), model["name"]]
+    exclude_aliases = model.get("excludeAliases") or []
+    found: Path | None = None
+    fallback: Path | None = None
+    fallback_score = 0
     try:
         for candidate in folder.rglob("*"):
-            if candidate.is_file() and candidate.name.lower() == wanted:
-                model["installed"] = True
-                model["path"] = str(candidate)
-                if model["sizeBytes"]:
-                    try:
-                        model["sizeMatches"] = candidate.stat().st_size == model["sizeBytes"]
-                    except OSError:
-                        model["sizeMatches"] = None
-                return
+            if not candidate.is_file():
+                continue
+            if exclude_aliases and name_has_alias(candidate.name, exclude_aliases):
+                continue
+            relative = candidate.relative_to(folder).as_posix().casefold()
+            if relative == wanted or candidate.name.casefold() == wanted:
+                found = candidate
+                break
+            score = alias_score(candidate.name, aliases)
+            if score > fallback_score:
+                fallback = candidate
+                fallback_score = score
     except OSError:
         return
+    found = found or fallback
+    if found is None:
+        return
+    model["installed"] = True
+    model["path"] = str(found)
+    try:
+        model["resolvedName"] = found.relative_to(folder).as_posix()
+    except ValueError:
+        model["resolvedName"] = found.name
+    if model["sizeBytes"]:
+        try:
+            model["sizeMatches"] = found.stat().st_size == model["sizeBytes"]
+        except OSError:
+            model["sizeMatches"] = None

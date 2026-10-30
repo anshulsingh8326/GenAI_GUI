@@ -97,11 +97,26 @@ download when it needs one.
 6. Start ComfyUI if it is not already running. You can point
    *Settings -> Connections* at your ComfyUI start `.bat` and use **Launch
    ComfyUI** there.
-7. Add model files. **Settings -> Engine content** shows the files each module
-   expects; this app does not download models yet. The Krea 2 module supports
-   either **SNOFS_Krea2** (int8) or **Krea2 Turbo Q5_K_M** (GGUF); see
-   [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md) for manual links,
-   filenames and target folders. Optional nodes and models live there too.
+7. Add model files. Pick **one** base (install both only if you want both packs):
+   - **Krea 2 Turbo** — [krea2_turbo-Q5_K_M.gguf](https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q5_K_M.gguf)
+     → `ComfyUI/models/unet/`
+   - **Krea 2 SNOFS** — [SNOFS_Krea2 int8](https://civitai.com/models/2416142?modelVersionId=3333138)
+     → `ComfyUI/models/unet/`
+   - **Text encoder (shared)** — [qwen3vl_4b_fp8_scaled.safetensors](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors)
+     → `ComfyUI/models/text_encoders/`
+   - **VAE (shared)** — [qwen_image_vae.safetensors](https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors)
+     → `ComfyUI/models/vae/`
+
+   Then use **Settings -> Model catalog -> Refresh from ComfyUI**. The Text -> Image
+   **Setup** popup shows the same links, destination folders and missing files, and
+   accepts common renamed filenames through aliases. Full list:
+   [`docs/MODEL_DOWNLOADS.md`](docs/MODEL_DOWNLOADS.md).
+
+   Optional extras, separate from the base model:
+   - **Realism Engine LoRA** (enabled by default) — [direct file](https://huggingface.co/RazzzHF/realism_engine_krea2/resolve/main/realism_engine_krea2_v3.1.safetensors)
+     → `ComfyUI/models/loras/`
+   - **4x-UltraSharp** (off by default) — [direct file](https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth)
+     → `ComfyUI/models/upscale_models/`
 8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
    prompt enhancement.
 
@@ -130,17 +145,27 @@ release that needs no Node, build the frontend first and include
   shared core baseline (GGUF loader required, Manager recommended), what each generation
   module needs, and every model file grouped by what it generates (image / video / LoRA /
   VAE / encoder) - kinds and LoRA triggers are read from file headers only. A startup popup
-  lists missing **required custom nodes** with individual install buttons; optional nodes and
-  models never trigger it. Node/package installers for declared requirements are implemented;
+  lists missing **required custom nodes** with individual install buttons; engine-backed
+  modules also open a setup popup for missing required model files. Optional nodes and models
+  never block readiness. Node/package installers for declared requirements are implemented;
   verified model downloads are the next phase. Git is required for installs. The editable
   model/LoRA catalog (`data/model_catalog.json`, *Settings -> Model catalog*) tracks model
   links, strength ranges and trigger words and feeds the composer - see
   `docs/MODEL_CATALOG.md`.
 - **Text → Image (T2I_main)** - strict T2I through ComfyUI with Krea 2 Turbo: model-aware
-  ranges, LoRA chaining, latent refine or 4x-UltraSharp, prompt enhancement, batch generation
-  and visible upscale on/off. Settings persist across tabs/reloads; every panel has a reset.
-  History is a chat workspace with result cards, full applied settings, shared media viewer
-  and soft deletion (message-only or move images to trash).
+  ranges, LoRA chaining, optional latent refine or 4x-UltraSharp (off by default), prompt
+  enhancement, batch generation and visible upscale on/off. Two packs share one graph:
+  **Krea 2 Turbo** (Q5_K_M, 9 steps / CFG 2.0, not NSFW) and **Krea 2 SNOFS** (int8,
+  12 steps / CFG 2.5). Each pack has its own
+  `defaults.json`; edit that one file for its sampling, size, refine, upscaler and LoRA-chain
+  defaults. Only the Realism Engine LoRA is enabled by default; the other LoRAs start off.
+  Generic Krea 2 filenames are matched through aliases and the real catalog
+  filename is bound into the graph. A first-open
+  **Setup** popup reports
+  missing required files, folders, sizes and links (and never downloads anything). Settings
+  persist across tabs/reloads; every panel has a reset. History is a chat workspace with
+  result cards, full applied settings, shared media viewer and soft deletion (message-only or
+  move images to trash).
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
   favorites, tags, search, refresh and a shared fullscreen viewer. Delete moves files to
   `data\trash` - **nothing is ever hard-deleted**.
@@ -160,16 +185,20 @@ sidebar in `frontend/src/lib/nav.ts`; `soon: true` is only the placeholder flag,
 so remove it when the module is live. Image → Video also needs the shared
 library/viewer change noted in the guide.
 
-Paste this into your AI agent:
+Paste this into your AI agent, replacing the idea placeholder:
 
-> Read `docs/GENMODULE_GUIDE.md`. Build an Image → Image (or Image → Video)
-> GenModule from `backend/app/GenModules/_template`. Follow §3 to copy/rename it
-> and register the backend router, Vue route, and grouped sidebar item. Keep
-> defaults and ranges in the tracked pack JSON; expose them via `/catalog` so
-> sliders and selects only offer supported values. Run the §3.6 checks and §8.5
-> smoke test. Use `T2I_main` only as the ComfyUI reference; do not modify it.
+> Read `docs/GENMODULE_GUIDE.md` and `docs/GENMODULE_PROMPT.md`. Build
+> **`(Your GenModule Idea)`** as one GenModule from
+> `backend/app/GenModules/_template`. Follow §3 to copy/rename it and register the
+> backend router, Vue route, and grouped sidebar item. Keep one pack folder per
+> family/recipe, put defaults/ranges/filenames in pack JSON, and expose them via
+> `/catalog`. Use alias-based file detection and one-of groups in
+> `requirements.json`; add the shared `/setup` modal for missing files. Run the
+> §3.6 checks and §8.5 smoke test. Use `T2I_main` only as the ComfyUI reference;
+> do not modify it.
 
-`docs/PACKS.md` covers packs; `docs/MODEL_CATALOG.md` covers per-model ranges.
+`docs/GENMODULE_PROMPT.md` is the full copy-paste prompt. `docs/PACKS.md` covers
+packs; `docs/MODEL_CATALOG.md` covers per-model ranges.
 
 ## Agents (MCP)
 
@@ -228,7 +257,8 @@ Full structure: `docs/PLAN.md` §7.
 | `docs/MODEL_CATALOG.md` | editable model/LoRA metadata: links, strength ranges, triggers, API |
 | `docs/PACKS.md` | ComfyUI workflow -> pack/recipe guide |
 | `docs/GUI_GUIDELINES.md` | frontend conventions for every new module |
-| `docs/GENMODULE_GUIDE.md` | reusable GenModule guide: `_template` starter, host registration, packs, jobs, library and media viewer |
+| `docs/GENMODULE_GUIDE.md` | reusable GenModule guide: `_template` starter, host registration, packs, aliases, setup popup, jobs, library and media viewer |
+| `docs/GENMODULE_PROMPT.md` | copy-paste AI prompt for building a GenModule from `(Your GenModule Idea)` |
 | `docs/BACKEND_GUIDELINES.md` | backend conventions, data rules, safety rules |
 | `backend/README.md` | API endpoint tables + MCP server details |
 | `tools/README.md` | setup checks, portable uv/Python/Node, frontend rebuild rules |

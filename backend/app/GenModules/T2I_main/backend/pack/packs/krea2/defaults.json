@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "description": "The only file to edit for this pack's normal generation defaults: model, size, sampling, refine, upscaler and default LoRA chain. Workflow literals and models.json ranges do not override these values.",
+  "modelId": "krea2-turbo-q5",
+  "ratio": "1:1",
+  "size": 1024,
+  "batch": 1,
+  "seed": 0,
+  "lockSeed": false,
+  "negativePrompt": "",
+  "autoTriggers": true,
+  "enhanceEnabled": false,
+  "sampling": {
+    "steps": 9,
+    "cfg": 2.0,
+    "sampler": "euler",
+    "scheduler": "simple",
+    "denoise": 1.0
+  },
+  "refine": {
+    "steps": 6,
+    "cfg": 2.0,
+    "denoise": 0.45,
+    "scale": 1536
+  },
+  "upscaler": {
+    "id": "latent-refine",
+    "enabled": false,
+    "value": 1536
+  },
+  "loraChain": [
+    {
+      "id": "lora-xcreampiex-krea2-v1-1-000002500",
+      "strength": 1.0,
+      "on": false
+    },
+    {
+      "id": "lora-krea2-g4ngb4ng-v1",
+      "strength": 2.0,
+      "on": false
+    },
+    {
+      "id": "lora-mysticxxx-krea2-v3",
+      "strength": 0.7,
+      "on": false
+    },
+    {
+      "id": "lora-krea-2-mombod-epoch-7",
+      "strength": 0.6,
+      "on": false
+    },
+    {
+      "id": "lora-realism-engine-krea2-v3-1",
+      "strength": 0.6,
+      "on": true
+    },
+    {
+      "id": "lora-labia-minora-krea2-loraholic",
+      "strength": 3.0,
+      "on": false
+    },
+    {
+      "id": "lora-krea2-nsfw-aesthetics-v1",
+      "strength": 0.4,
+      "on": false
+    }
+  ]
+}

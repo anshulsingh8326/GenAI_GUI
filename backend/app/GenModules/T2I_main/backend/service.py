@@ -19,14 +19,16 @@ backend restarts, `resume_pending_jobs()` reattaches to the stored prompt id.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import secrets
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from app.common import settings_store
+from app.common import module_setup, settings_store
 from app.connectors import service as connectors
 from app.jobs import service as jobs
 from app.library import service as library
@@ -38,6 +40,9 @@ logger = logging.getLogger("uvicorn.error")
 
 MODULE_ID = "T2I_main"
 TAB_ID = "text-to-image"
+MODULE_DIR = Path(__file__).resolve().parent.parent
+REQUIREMENTS_FILE = MODULE_DIR / "requirements.json"
+MANIFEST_FILE = MODULE_DIR / "manifest.json"
 STAGE_DEFS = (
     ("enhance", "Enhance prompt"),
     ("compose", "Compose workflow"),
@@ -224,7 +229,7 @@ def _ratio_map(pack: dict) -> dict[str, dict]:
 
 
 def _resolve_model(pack: dict, model_id: str) -> dict:
-    wanted = (model_id or "").strip() or str(pack["options"]["defaults"].get("modelId") or "")
+    wanted = (model_id or "").strip() or str(pack["defaults"].get("modelId") or "")
     model = pack["models"].get(wanted)
     if model is None:
         raise ValidationError(
@@ -248,6 +253,7 @@ def _resolve_size(
 ) -> tuple[int, int, str, int]:
     """Resolve explicit width/height or ratio+long-side to a 64-px-aligned size."""
     options = pack["options"]
+    defaults = pack["defaults"]
     ratios = _ratio_map(pack)
     width_range = model["ranges"]["width"]
     height_range = model["ranges"]["height"]
@@ -289,7 +295,7 @@ def _resolve_size(
             height = int(height_range["default"])
             return width, height, "1:1", max(width, height)
 
-    ratio_id = (payload.ratio or str(options["defaults"].get("ratio") or "1:1")).strip() or "1:1"
+    ratio_id = (payload.ratio or str(defaults.get("ratio") or "1:1")).strip() or "1:1"
     ratio = ratios.get(ratio_id)
     if ratio is None:
         errors.append(
@@ -303,7 +309,7 @@ def _resolve_size(
         ratio = ratios["1:1"]
 
     long_range = width_range if float(ratio["w"]) >= float(ratio["h"]) else height_range
-    size_raw = payload.size if payload.size is not None else options["defaults"].get("size") or options["size"]["longSideDefault"]
+    size_raw = payload.size if payload.size is not None else defaults.get("size") or options["size"]["longSideDefault"]
     size = _range_value(long_range, size_raw, "size", errors, warnings, integer=True, align_step=True)
 
     if float(ratio["w"]) >= float(ratio["h"]):
@@ -422,15 +428,16 @@ def _resolve_loras(
 def _resolve_upscaler(
     payload: T2IJobRequest,
     model: dict,
+    snapshot: dict,
     pack: dict,
     errors: list[dict],
     warnings: list[dict],
 ) -> dict:
-    options = pack["options"]
-    defaults = options["defaults"].get("upscaler") or {}
+    defaults = pack["defaults"].get("upscaler") or {}
     requested = payload.advanced.upscaler if payload.advanced else None
     upscaler_id = (requested.id if requested and requested.id else defaults.get("id")) or "none"
-    upscaler = pack["upscalers"].get(str(upscaler_id))
+    snapshot_upscalers = {str(item["id"]): item for item in snapshot.get("upscalers") or []}
+    upscaler = snapshot_upscalers.get(str(upscaler_id)) or pack["upscalers"].get(str(upscaler_id))
     if upscaler is None:
         errors.append(
             _issue(
@@ -611,7 +618,7 @@ def _resolve_enhance(
 ) -> dict:
     options = pack["options"]
     cfg = options["enhance"]
-    defaults = options["defaults"]
+    defaults = pack["defaults"]
     raw = payload.enhance
     enabled = (
         bool(raw.enabled)
@@ -808,7 +815,7 @@ def _normalize_request(payload: T2IJobRequest, pack: dict) -> dict:
 
     width, height, ratio_id, size = _resolve_size(payload, model_view, pack, errors, warnings)
     loras = _resolve_loras(payload, snapshot, model_view, pack, errors, warnings)
-    upscaler = _resolve_upscaler(payload, model_view, pack, errors, warnings)
+    upscaler = _resolve_upscaler(payload, model_view, snapshot, pack, errors, warnings)
 
     adv = payload.advanced
     steps_raw = adv.steps if adv else None
@@ -1641,6 +1648,7 @@ async def catalog_snapshot(model_id: str | None = None) -> dict:
         "ollama": ollama,
         "ready": bool(comfy.get("connected")),
     }
+    packs = catalog.load_packs()
     try:
         snapshot = catalog.build_snapshot(
             pack,
@@ -1650,6 +1658,45 @@ async def catalog_snapshot(model_id: str | None = None) -> dict:
         )
     except KeyError as exc:
         raise ValidationError([_issue("unknown_model", str(exc), "modelId")]) from exc
+
+    # On a first load with no explicit model, a configured default may not be
+    # installed. Prefer the first pack that actually has an installed model so
+    # a SNOFS-only install does not open on the missing Q5 default.
+    if not model_id:
+        selected = next(
+            (
+                item
+                for item in snapshot.get("models") or []
+                if item.get("id") == snapshot.get("selectedModelId")
+            ),
+            None,
+        )
+        if selected is not None and selected.get("present") is False:
+            for other_id, other in packs.items():
+                if other_id == pack["id"]:
+                    continue
+                try:
+                    other_snapshot = catalog.build_snapshot(other, user, engine=engine)
+                except KeyError:
+                    continue
+                if any(item.get("present") is True for item in other_snapshot.get("models") or []):
+                    pack = other
+                    snapshot = other_snapshot
+                    break
+
+    # Keep one model dropdown for the whole GenModule. The active pack supplies
+    # ranges, LoRAs and upscalers; other packs contribute their model entries so
+    # the GUI can switch packs by picking one of their models.
+    all_models = list(snapshot.get("models") or [])
+    for other_id, other in packs.items():
+        if other_id == pack["id"]:
+            continue
+        try:
+            other_snapshot = catalog.build_snapshot(other, user, engine=engine)
+        except KeyError:
+            continue
+        all_models.extend(other_snapshot.get("models") or [])
+    snapshot["models"] = all_models
 
     settings, _ = settings_store.load()
     text_models = list(snapshot.get("textModels") or [])
@@ -1731,7 +1778,7 @@ def _default_enhance(pack: dict, settings: dict, comfy: dict, ollama: dict, text
         ]
         model = str(comfy_models[0]["id"]) if comfy_models else ""
     return {
-        "enabled": bool(pack["options"]["defaults"].get("enhanceEnabled")),
+        "enabled": bool(pack["defaults"].get("enhanceEnabled")),
         "provider": provider,
         "model": model,
         "systemPrompt": str((settings.get("prompts") or {}).get(cfg.get("systemPromptKey") or "enhance") or ""),
@@ -1784,6 +1831,37 @@ def pack_info() -> dict:
             "format": "comfyui-api",
         },
     }
+
+
+def setup_info() -> dict:
+    """Standardized first-open setup payload for the shared requirements modal.
+
+    It reports missing required files and source links only. There is no
+    download, install, move or delete action here or in the frontend.
+    """
+    try:
+        manifest = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    pack_meta = [
+        {
+            "id": pack["id"],
+            "label": pack["label"],
+            "description": pack.get("description") or "",
+            "nsfw": bool(pack.get("nsfw")),
+            "order": int(pack.get("order") or 0),
+        }
+        for pack in catalog.load_packs().values()
+    ]
+    return module_setup.build_setup_payload(
+        requirements=module_setup.load_requirements(REQUIREMENTS_FILE),
+        packs=pack_meta,
+        catalog=catalog.load_user_catalog(),
+        module_id=MODULE_ID,
+        module_label=str(manifest.get("name") or MODULE_ID),
+        module_description=str(manifest.get("description") or ""),
+        module_nsfw=any(pack["nsfw"] for pack in pack_meta),
+    )
 
 
 def validate_payload(payload: T2IJobRequest) -> dict:

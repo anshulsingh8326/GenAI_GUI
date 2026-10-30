@@ -28,9 +28,16 @@ aliases); do not import from the backend folder at runtime. Reusable media viewi
 
 ## 1. Scope
 
-- Krea 2 Turbo (int8, or Q5 GGUF when installed)
-- LoRA chain with per-LoRA strength and automatic trigger injection
-- latent refine (default) or optional 4x-UltraSharp, or no upscale
+- Krea 2 Turbo: two packs share one graph. **Krea 2 Turbo** uses **Krea2 Turbo Q5_K_M**
+  (GGUF, 9 steps / CFG 2.0); **Krea 2 SNOFS** uses **SNOFS_Krea2** (int8, 12 steps / CFG 2.5).
+  Install the base for each pack you want. Alias-based detection binds the real catalog
+  filename, so a renamed SNOFS or generic `krea2` file still works. Picking a model from the
+  other pack reloads the catalog, ranges and defaults for that pack.
+- Each pack's generation defaults live in its own `defaults.json`; `models.json` holds
+  bindings/ranges only and the API workflow holds wiring only.
+- LoRA chain with per-LoRA strength and automatic trigger injection; NSFW LoRAs are tagged
+- only the Realism Engine LoRA is enabled by default; other LoRAs start off
+- optional latent refine or 4x-UltraSharp; both start off by default
 - optional Ollama/ComfyUI prompt enhancement with preview/approve and an advanced custom
   system brief
 - batch 1–4, ratio presets, model-specific safe ranges
@@ -46,6 +53,7 @@ All calls are same-origin under `/api/t2i`.
 | --- | --- | --- |
 | `GET` | `/catalog?modelId=` | models, LoRAs, upscalers, ratios, ranges, defaults, engine status |
 | `GET` | `/pack` | secret-free pack summary for debug/ops |
+| `GET` | `/setup` | missing required files/groups, destinations, links, tags for the setup modal |
 | `POST` | `/validate` | normalize/validate without creating a job |
 | `POST` | `/enhance` | prompt rewrite preview |
 | `POST` | `/jobs` | create and start a job |
@@ -56,6 +64,16 @@ All calls are same-origin under `/api/t2i`.
 | `DELETE` | `/jobs?deleteAssets=true\|false` | clear this module's whole chat; optionally trash all module results (default `false`) |
 
 Job ids contain `#` (`#145`). Always call `encodeURIComponent(jobId)` before building a URL.
+
+### First-open setup
+
+`GET /setup` returns the shared `ModuleSetupPayload` (see `frontend/src/types.ts`). Fetch it once
+on mount and auto-open `frontend/src/components/content/ModuleSetupModal.vue` only when
+`ready === false`; `ready: null` means the user catalog is unavailable, not that every file is
+missing. A header **Setup** button reopens the modal and refreshes the check. The modal only
+reports files and opens links; it never downloads, installs, moves or deletes anything. Each
+pack's base is an optional one-of group, so a single installed base does not block readiness;
+a stale saved model switches to an installed model and its pack's ranges/defaults.
 
 The create request carries the complete resolved selection:
 
@@ -169,6 +187,8 @@ Behaviour:
 2. Merge over pack defaults.
 3. After the catalog arrives, reconcile:
    - unknown model/ratio/sampler/scheduler/LoRA/upscaler → fallback;
+   - a saved model that is no longer installed → an installed base-group sibling, then any
+     installed model;
    - incompatible LoRAs dropped; `maxLoras` enforced;
    - stale sampling/refine/LoRA/upscale ranges clamped;
    - oversize batch/size clamped to the selected model;

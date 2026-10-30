@@ -13,6 +13,7 @@ import { storeToRefs } from 'pinia'
 import {
   ArrowDown,
   ChevronDown,
+  Download,
   Images,
   RotateCcw,
   Settings2,
@@ -23,15 +24,17 @@ import {
   X,
 } from '@lucide/vue'
 import { useT2IStore } from './store'
+import { t2iApi } from './api'
 import { useLibraryStore } from '@/stores/library'
 import { useUiStore } from '@/stores/ui'
 import type { MediaViewerItem } from '@/components/media/types'
 import MediaViewer from '@/components/media/MediaViewer.vue'
+import ModuleSetupModal from '@/components/content/ModuleSetupModal.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppPopover from '@/components/ui/AppPopover.vue'
 import T2IGenerationCard from './T2IGenerationCard.vue'
 import T2ISettingsPanel from './T2ISettingsPanel.vue'
-import type { T2IJobRecord } from './types'
+import type { ModuleSetupPayload, T2IJobRecord } from './types'
 
 const store = useT2IStore()
 const library = useLibraryStore()
@@ -58,6 +61,11 @@ const settingsOpen = ref(
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
 )
 
+const setupOpen = ref(false)
+const setupPayload = ref<ModuleSetupPayload | null>(null)
+const setupLoading = ref(false)
+const setupError = ref('')
+
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
 const viewerItems = ref<MediaViewerItem[]>([])
@@ -83,6 +91,7 @@ const visibleWarnings = computed(() => {
     .slice(0, 5)
 })
 const savedLabel = computed(() => (store.lastSavedAt ? 'Autosaved' : 'Not saved yet'))
+const setupNeedsFiles = computed(() => setupPayload.value?.ready === false)
 const isEmpty = computed(() => !jobs.value.length && !jobsLoading.value)
 const promptSuggestions = [
   'A cozy reading nook by a rainy window, soft afternoon light',
@@ -120,6 +129,24 @@ async function openSettings(section?: string): Promise<void> {
   document
     .getElementById(`t2i-panel-${section}`)
     ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function loadSetup(openWhenMissing = false): Promise<void> {
+  setupLoading.value = true
+  setupError.value = ''
+  try {
+    setupPayload.value = await t2iApi.getSetup()
+    if (openWhenMissing && setupPayload.value.ready === false) setupOpen.value = true
+  } catch (err) {
+    setupError.value = store.errorText(err)
+  } finally {
+    setupLoading.value = false
+  }
+}
+
+function openSetup(): void {
+  setupOpen.value = true
+  void loadSetup(false)
 }
 
 function handleUpscaleToggle(): void {
@@ -235,6 +262,7 @@ watch(settingsOpen, async () => {
 
 onMounted(async () => {
   await Promise.allSettled([store.loadCatalog(), store.loadJobs(), library.syncFromBackend()])
+  void loadSetup(true)
   await nextTick()
   scrollToLatest()
 })
@@ -262,9 +290,10 @@ onBeforeUnmount(() => {
         </span>
         <span
           v-if="store.selectedModel"
-          class="hidden h-7 items-center rounded-full border border-border bg-surface px-2.5 text-muted sm:inline-flex"
+          class="hidden h-7 items-center gap-1 rounded-full border border-border bg-surface px-2.5 text-muted sm:inline-flex"
         >
           {{ store.selectedModel.shortLabel }}
+          <span v-if="store.selectedModel.nsfw" class="font-medium text-warn">(NSFW)</span>
         </span>
         <RouterLink
           to="/gallery"
@@ -329,6 +358,22 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </AppPopover>
+
+        <button
+          type="button"
+          class="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border bg-surface px-2.5 transition-colors hover:border-accent/40 hover:text-text"
+          :class="
+            setupNeedsFiles
+              ? 'border-warn/45 text-warn'
+              : 'border-border text-muted'
+          "
+          :title="setupNeedsFiles ? 'Missing required model files' : 'Required files and download links'"
+          @click="openSetup"
+        >
+          <Download class="h-3.5 w-3.5" />
+          Setup
+          <span v-if="setupNeedsFiles" class="h-1.5 w-1.5 rounded-full bg-warn" />
+        </button>
 
         <button
           type="button"
@@ -600,5 +645,13 @@ onBeforeUnmount(() => {
         </template>
       </template>
     </MediaViewer>
+
+    <ModuleSetupModal
+      v-model="setupOpen"
+      :payload="setupPayload"
+      :loading="setupLoading"
+      :error="setupError"
+      @refresh="loadSetup(false)"
+    />
   </div>
 </template>

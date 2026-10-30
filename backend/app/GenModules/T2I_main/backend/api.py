@@ -84,6 +84,13 @@ def get_pack() -> dict:
     return service.pack_info()
 
 
+@router.get("/setup")
+@_mapped
+def get_setup() -> dict:
+    """Missing-file/setup payload for the shared first-open modal."""
+    return service.setup_info()
+
+
 @router.post("/validate")
 @_mapped
 def validate(payload: T2IJobRequest) -> dict:

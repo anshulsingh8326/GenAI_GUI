@@ -1,4 +1,44 @@
 {
+  "schemaVersion": 2,
+  "module": {
+    "id": "T2I_main",
+    "label": "Text -> Image",
+    "description": "Krea 2 Turbo text-to-image. Install one base model per pack, the shared text encoder and VAE, then add any optional LoRAs and upscalers you want. The normal Krea 2 pack defaults to 9 steps / CFG 2.0; the SNOFS pack defaults to 12 steps / CFG 2.5.",
+    "nsfw": true
+  },
+  "groups": [
+    {
+      "id": "krea2-base",
+      "pack": "krea2",
+      "label": "Krea 2 Turbo base model",
+      "mode": "oneOf",
+      "required": false,
+      "aliases": [
+        "krea2",
+        "krea2_turbo",
+        "q5_k_m"
+      ],
+      "excludeAliases": [
+        "snofs",
+        "sexnudes",
+        "snofssexnudesandother"
+      ],
+      "why": "Install the Krea 2 Turbo Q5_K_M GGUF base. Generic Krea 2 filenames are detected, but SNOFS files are reserved for the separate SNOFS pack."
+    },
+    {
+      "id": "krea2-snofs-base",
+      "pack": "krea2-snofs",
+      "label": "Krea 2 SNOFS base model",
+      "mode": "oneOf",
+      "required": false,
+      "aliases": [
+        "snofs",
+        "snofs_krea2",
+        "snofssexnudesandother"
+      ],
+      "why": "Install the SNOFS Krea 2 Turbo V14 int8 base. It shares the Krea 2 graph but keeps 12 steps / CFG 2.5 defaults."
+    }
+  ],
   "nodes": [
     {
       "name": "rgthree-comfy",
@@ -10,76 +50,236 @@
   ],
   "models": [
     {
+      "id": "krea2-snofs-int8",
+      "pack": "krea2-snofs",
+      "role": "base",
+      "label": "SNOFS_Krea2",
       "name": "snofsSexNudesAndOther_krea2TurboV14_int8.safetensors",
       "target": "unet",
+      "aliases": [
+        "SNOFS_Krea2",
+        "snofs_krea2",
+        "snofs",
+        "snofsSexNudesAndOther",
+        "snofsSexNudesAndOther_krea2TurboV14"
+      ],
+      "required": false,
+      "group": "krea2-snofs-base",
+      "tested": true,
+      "nsfw": true,
       "size": 12829186855,
-      "optional": false
+      "url": "https://civitai.com/api/download/models/3333138?fileId=3219464",
+      "pageUrl": "https://civitai.com/models/2416142?modelVersionId=3333138",
+      "sha256": "AFB9F7DB3122AD2BE63EF6A236B104566770DE1590F14693F452EF137BCF75A9",
+      "why": "SNOFS Krea 2 Turbo V14 int8 base. The SNOFS pack defaults to 12 steps / CFG 2.5."
     },
     {
+      "id": "krea2-turbo-q5",
+      "pack": "krea2",
+      "role": "base",
+      "label": "Krea2 Turbo Q5_K_M",
       "name": "krea2_turbo-Q5_K_M.gguf",
       "target": "unet",
+      "aliases": [
+        "Krea2 Turbo Q5_K_M",
+        "krea2_turbo_q5_k_m",
+        "krea2_turbo-Q5_K_M",
+        "q5_k_m",
+        "q5",
+        "krea2",
+        "krea2_turbo"
+      ],
+      "excludeAliases": [
+        "snofs",
+        "sexnudes",
+        "snofssexnudesandother"
+      ],
+      "required": false,
+      "group": "krea2-base",
+      "tested": true,
+      "nsfw": false,
       "size": 8871195936,
-      "optional": true
+      "url": "https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF/resolve/main/krea2_turbo-Q5_K_M.gguf",
+      "pageUrl": "https://huggingface.co/vantagewithai/Krea-2-Turbo-GGUF",
+      "why": "Normal Krea 2 Turbo Q5_K_M GGUF base. The normal pack defaults to 9 steps / CFG 2.0."
     },
     {
+      "id": "krea2-text-encoder",
+      "pack": "krea2",
+      "role": "text_encoder",
+      "label": "Qwen3-VL 4B text encoder",
       "name": "qwen3vl_4b_fp8_scaled.safetensors",
       "target": "text_encoders",
+      "aliases": [
+        "qwen3vl",
+        "qwen3vl_4b",
+        "qwen3vl_4b_fp8_scaled"
+      ],
+      "required": true,
+      "tested": true,
+      "nsfw": false,
       "size": 5242467968,
-      "optional": false
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Krea-2",
+      "why": "Shared CLIP/text-encoder file loaded with clip type `krea2`."
     },
     {
+      "id": "krea2-vae",
+      "pack": "krea2",
+      "role": "vae",
+      "label": "qwen_image VAE",
       "name": "qwen_image_vae.safetensors",
       "target": "vae",
+      "aliases": [
+        "qwen_image_vae",
+        "qwenimagevae"
+      ],
+      "required": true,
+      "tested": true,
+      "nsfw": false,
       "size": 253806246,
-      "optional": false
+      "url": "https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Krea-2",
+      "why": "Shared Krea 2 VAE used for both base models."
     },
     {
+      "id": "krea2-4x-ultrasharp",
+      "pack": "krea2",
+      "role": "upscaler",
+      "label": "4x-UltraSharp",
       "name": "4x-UltraSharp.pth",
       "target": "upscale_models",
+      "aliases": [
+        "4x_ultrasharp",
+        "ultrasharp"
+      ],
+      "required": false,
+      "tested": false,
+      "nsfw": false,
       "size": 66961958,
-      "optional": true
+      "url": "https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth",
+      "pageUrl": "https://huggingface.co/Kim2091/UltraSharp",
+      "why": "Optional ESRGAN post-pass. It is an alternative to latent refine, not a required file."
     },
     {
+      "id": "lora-xcreampiex-krea2-v1-1",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "xCreampiex (Krea2 v1.1)",
       "name": "xCreampiex_krea2_v1.1_000002500.safetensors",
       "target": "loras",
+      "aliases": [
+        "xcreampiex"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": true,
       "size": 228587792,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW LoRA. No public download URL is tracked; use the source you obtained it from."
     },
     {
+      "id": "lora-krea2-g4ngb4ng-v1",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "G4NGB4NG (Krea2 v1)",
       "name": "KREA2_G4NGB4NG_V1.safetensors",
       "target": "loras",
+      "aliases": [
+        "g4ngb4ng"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": true,
       "size": 228587768,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW LoRA. No public download URL is tracked."
     },
     {
+      "id": "lora-mysticxxx-krea2-v3",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "MysticXXX (Krea2 v3)",
       "name": "MysticXXX_KREA2_v3.safetensors",
       "target": "loras",
+      "aliases": [
+        "mysticxxx"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": true,
       "size": 228587304,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW LoRA. No public download URL is tracked."
     },
     {
+      "id": "lora-krea-2-mombod-epoch-7",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "Mombod (Krea2 epoch 7)",
       "name": "Krea_2_Mombod_epoch_7.safetensors",
       "target": "loras",
+      "aliases": [
+        "mombod"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": true,
       "size": 228588912,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW LoRA. No public download URL is tracked."
     },
     {
+      "id": "lora-realism-engine-krea2-v3-1",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "Realism Engine (Krea2 v3.1)",
       "name": "realism_engine_krea2_v3.1.safetensors",
       "target": "loras",
+      "aliases": [
+        "realism_engine_krea2"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": false,
       "size": 1562410296,
-      "optional": true
+      "url": "https://huggingface.co/RazzzHF/realism_engine_krea2/resolve/main/realism_engine_krea2_v3.1.safetensors",
+      "pageUrl": "https://huggingface.co/RazzzHF/realism_engine_krea2",
+      "why": "Optional realism/style LoRA. Not NSFW-specific. The default chain uses 0.6."
     },
     {
+      "id": "lora-labia-minora-krea2-loraholic",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "Labia Minora Slider (Krea2)",
       "name": "labia_minora_krea2_loraholic.safetensors",
       "target": "loras",
+      "aliases": [
+        "labia_minora"
+      ],
+      "required": false,
+      "tested": true,
+      "nsfw": true,
       "size": 7203152,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW slider LoRA. No public download URL is tracked."
     },
     {
+      "id": "lora-krea2-nsfw-aesthetics-v1",
+      "pack": "krea2",
+      "role": "lora",
+      "label": "NSFW Aesthetics (Krea2 v1)",
       "name": "Krea2_NSFW_Aesthetics_V1.safetensors",
       "target": "loras",
+      "aliases": [
+        "nsfw_aesthetics"
+      ],
+      "required": false,
+      "tested": false,
+      "nsfw": true,
       "size": 457111976,
-      "optional": true
+      "url": null,
+      "why": "Optional NSFW aesthetics LoRA. No public download URL is tracked."
     }
   ]
 }

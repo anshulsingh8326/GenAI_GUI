@@ -6,15 +6,23 @@
       "id": "lora-xcreampiex-krea2-v1-1-000002500",
       "label": "xCreampiex (Krea2 v1.1)",
       "file": "xCreampiex_krea2_v1.1_000002500.safetensors",
+      "aliases": [
+        "xcreampiex"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "concept",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": true,
       "defaultOrder": 0,
-      "triggers": ["creampie"],
+      "triggers": [
+        "creampie"
+      ],
       "strength": {
         "label": "Strength",
         "min": 0.0,
@@ -34,15 +42,23 @@
       "id": "lora-krea2-g4ngb4ng-v1",
       "label": "G4NGB4NG (Krea2 v1)",
       "file": "KREA2_G4NGB4NG_V1.safetensors",
+      "aliases": [
+        "g4ngb4ng"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "style",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": true,
       "defaultOrder": 1,
-      "triggers": ["G4NGB4NG"],
+      "triggers": [
+        "G4NGB4NG"
+      ],
       "strength": {
         "label": "Strength",
         "min": 0.0,
@@ -62,10 +78,16 @@
       "id": "lora-mysticxxx-krea2-v3",
       "label": "MysticXXX (Krea2 v3)",
       "file": "MysticXXX_KREA2_v3.safetensors",
+      "aliases": [
+        "mysticxxx"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "style",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": true,
@@ -90,10 +112,16 @@
       "id": "lora-krea-2-mombod-epoch-7",
       "label": "Mombod (Krea2 epoch 7)",
       "file": "Krea_2_Mombod_epoch_7.safetensors",
+      "aliases": [
+        "mombod"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "concept",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": true,
@@ -119,9 +147,12 @@
       "label": "Realism Engine (Krea2 v3.1)",
       "file": "realism_engine_krea2_v3.1.safetensors",
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "style",
+      "nsfw": false,
       "t2i": true,
       "verified": true,
       "tested": true,
@@ -140,16 +171,23 @@
         "unit": "",
         "description": "Photoreal skin/texture push. 0.6 is the Freeze v8 value."
       },
-      "notes": "Fifth LoRA in the Freeze v8 chain (strength 0.6)."
+      "notes": "Fifth LoRA in the Freeze v8 chain (strength 0.6).",
+      "why": "Optional realism/style LoRA. Not NSFW-specific. The default chain uses 0.6."
     },
     {
       "id": "lora-labia-minora-krea2-loraholic",
       "label": "Labia Minora Slider (Krea2)",
       "file": "labia_minora_krea2_loraholic.safetensors",
+      "aliases": [
+        "labia_minora"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "slider",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": true,
@@ -159,7 +197,7 @@
         "label": "Slider value",
         "min": -4.0,
         "max": 8.0,
-        "default": 0.0,
+        "default": 3.0,
         "step": 0.05,
         "recommendedMin": -4.0,
         "recommendedMax": 6.0,
@@ -174,10 +212,16 @@
       "id": "lora-krea2-nsfw-aesthetics-v1",
       "label": "NSFW Aesthetics (Krea2 v1)",
       "file": "Krea2_NSFW_Aesthetics_V1.safetensors",
+      "aliases": [
+        "nsfw_aesthetics"
+      ],
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "style",
+      "nsfw": true,
       "t2i": true,
       "verified": true,
       "tested": false,
@@ -203,7 +247,9 @@
       "label": "Kroma v0.3 base LoRA",
       "file": "kroma-v0.3-base-lora-custom-unlock-no-reupload.safetensors",
       "base": "chroma",
-      "compatibleBases": ["chroma"],
+      "compatibleBases": [
+        "chroma"
+      ],
       "family": "Chroma",
       "type": "experimental",
       "t2i": false,
@@ -232,7 +278,9 @@
       "label": "Krea2 Depth ControlNet v10",
       "file": "krea2DepthControlnet_v10.safetensors",
       "base": "krea2",
-      "compatibleBases": ["krea2"],
+      "compatibleBases": [
+        "krea2"
+      ],
       "family": "Krea 2",
       "type": "controlnet",
       "t2i": false,
@@ -261,7 +309,9 @@
       "label": "Klein SNUFS v1.4",
       "file": "klein_snofs_v1_4.safetensors",
       "base": "flux2-klein",
-      "compatibleBases": ["flux2-klein"],
+      "compatibleBases": [
+        "flux2-klein"
+      ],
       "family": "FLUX.2 Klein",
       "type": "concept",
       "t2i": false,
