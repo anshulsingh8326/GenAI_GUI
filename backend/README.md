@@ -150,7 +150,9 @@ the range checks in `service.py`. The full GUI behaviour contract is in
 The backend doubles as an MCP server so local AI agents (opencode, Claude Code, ...)
 use the exact same services the REST API uses - tools never bypass them.
 
-- **Start (stdio):** `uv run python -m app.mcp` from `backend/`.
+- **Start (stdio):** `uv run python -m app.mcp` from `backend/`. The entry point
+  creates the data folders and SQLite schema itself (idempotent), so it also
+  works before the FastAPI backend has run for the first time.
 - **Gate:** refuses to start while `agentEnabled` is false in `settings.json`
   (exit code 2 + a pointer to Settings). Enable it in the GUI under
   **Settings -> Agent Access**. `agentToken` gates the future streamable-HTTP
@@ -158,21 +160,32 @@ use the exact same services the REST API uses - tools never bypass them.
 - **Tools (v0):** `app_info` (engines, counts, capability registry), `list_models`
   (Ollama installed + loaded; ComfyUI listing arrives with the packs step),
   `job_status`, `list_jobs`, `library_list`, `import_asset` (copy a file into the library).
+  Tool results are JSON text content (the server does not emit structured output).
 - **Capability registry:** `app/common/capabilities.py` - `installed` is
   manifest-driven (`GenModules/<id>/manifest.json`, folders starting with `_`
-  are ignored), `planned` mirrors `docs/PLAN.md` §8. Generation tools appear
-  with the first pipeline step; until then `app_info` reports the truth.
+  are ignored); `planned` mirrors `docs/PLAN.md` §8 minus capabilities that are
+  already installed (matched by each manifest's `navId`). Generation tools are
+  not wired yet (`T2I_main` and `i2i_main` are GUI/REST only), so `app_info`
+  reports the truth.
 
-Agent config example (opencode style):
+Agent config example (OpenCode V2 - names live under `mcp.servers`; V1 put the
+name directly under `mcp`):
 
-```json
+```jsonc
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "genai-gui": {
-      "type": "local",
-      "command": ["<repo>/backend/.venv/Scripts/python.exe", "-m", "app.mcp"],
-      "cwd": "<repo>/backend"
+    "servers": {
+      "genai-gui": {
+        "type": "local",
+        "command": ["<repo>/backend/.venv/Scripts/python.exe", "-m", "app.mcp"],
+        "cwd": "<repo>/backend"
+      }
     }
   }
 }
 ```
+
+`cwd` must be `<repo>/backend` so `-m app.mcp` resolves. The server uses the same
+`data/` folder as the GUI by default; set `GENAI_DATA_DIR` to point both at a
+different one.

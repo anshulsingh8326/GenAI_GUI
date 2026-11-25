@@ -9,9 +9,11 @@ A local-first generative AI studio: **Vue 3 + TypeScript** frontend, **FastAPI**
 the backend serves the built GUI and owns all state (settings, jobs, assets). An optional
 **MCP server** exposes the same API to local AI agents.
 
-> **Status: T2I_main is live.** Text → Image runs through the real backend and ComfyUI:
-> validated pack ranges, persisted jobs, generated assets in the library, prompt
-> enhancement and result history. Other generation tabs are still mock until their
+> **Status: T2I_main is live; i2i_main is implemented.** Text → Image runs through the real
+> backend and ComfyUI: validated pack ranges, persisted jobs, generated assets in the library,
+> prompt enhancement and result history. Image → Image (Qwen Image 2.1 Turbo edit) ships the full
+> backend, GUI and ComfyUI graph; it needs the Qwen Image 2.1 diffusion model and 2.1 VAE
+> installed before its first live run. Other generation tabs are still mock until their
 > pipelines land - see `docs/PLAN.md` §8 for the feature ladder.
 
 ## Quick start
@@ -123,6 +125,10 @@ download when it needs one.
      → `ComfyUI/models/upscale_models/`
 8. Open **Text -> Image** and generate. Ollama is optional; it is only needed for
    prompt enhancement.
+9. **Image -> Image** needs its own files - a Qwen Image 2.1 Turbo diffusion model
+   (bf16 or int8), the Qwen3-VL 8B text encoder in `ComfyUI/models/text_encoders/`
+   and the **Qwen Image 2.1** VAE. Open the tab and use its **Setup** popup for the
+   exact links and destinations; the older `qwen_image_vae.safetensors` will not work.
 
 Later launches are automatic. Node.js is only needed to rebuild the UI after
 Vue source/config changes; once `frontend\dist` exists, running the app does not
@@ -170,6 +176,20 @@ release that needs no Node, build the frontend first and include
   persist across tabs/reloads; every panel has a reset. History is a chat workspace with
   result cards, full applied settings, shared media viewer and soft deletion (message-only or
   move images to trash).
+- **Image → Image (i2i_main)** - strict i2i through ComfyUI with Qwen Image 2.1 Turbo edit.
+  Upload or drop one to three reference images (labelled Image 1..n and addressed as `<image1>`,
+  `<image2>`, `<image3>` in the prompt), describe the change, and get one edited image per batch
+  item (1–4). Denoise is the main knob: `1.0` follows the checkpoint's shipped 8-step turbo sigma
+  schedule (`ManualSigmas`), anything lower runs a VAE-encoded img2img pass with the tail of that
+  schedule. Steps and CFG are editable; keep 8 steps and CFG 1.0 for the official path. Resolution
+  defaults to a 1024 px budget; `0` mirrors the source size rounded to 32 px and any positive value
+  is a total pixel budget that preserves the aspect ratio.
+  One diffusion model (bf16, int8_convrot or a Turbo GGUF), a Qwen3-VL 8B text encoder and the
+  **Qwen Image 2.1** VAE are required; the older `qwen_image_vae.safetensors` is not compatible. A
+  first-open **Setup** popup reports the missing files, folders and links and flags a text encoder
+  that sits in `models/unet` instead of `models/text_encoders`. Reference images are saved
+  separately from the form and only while they fit the browser budget; jobs keep thumbnails, so
+  **Reuse** restores settings only.
 - **Library / Gallery** - import (upload or drop files into `data\library`), thumbnails,
   favorites, tags, search, refresh and a shared fullscreen viewer. Delete moves files to
   `data\trash` - **nothing is ever hard-deleted**.
@@ -181,7 +201,7 @@ release that needs no Node, build the frontend first and include
 
 ## Build your own GenModule
 
-Want Image → Image, Image → Video, or another workflow? The app does not
+Want Image → Video, Face Swap, or another workflow? The app does not
 auto-discover modules, so start from `backend/app/GenModules/_template/`, copy
 and rename it, then add the three host registrations (backend router, Vue route,
 sidebar item) in `docs/GENMODULE_GUIDE.md` §3. New tabs use the existing grouped
@@ -207,23 +227,33 @@ packs; `docs/MODEL_CATALOG.md` covers per-model ranges.
 ## Agents (MCP)
 
 The backend doubles as an MCP server (stdio transport). Enable it in
-**Settings -> Agent Access**, then configure your agent - example for opencode:
+**Settings -> Agent Access**, then configure your agent. Example for OpenCode V2
+(server names live under `mcp.servers`; V1 put the name directly under `mcp`):
 
-```json
+```jsonc
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "genai-gui": {
-      "type": "local",
-      "command": ["<repo>/backend/.venv/Scripts/python.exe", "-m", "app.mcp"],
-      "cwd": "<repo>/backend"
+    "servers": {
+      "genai-gui": {
+        "type": "local",
+        "command": ["<repo>/backend/.venv/Scripts/python.exe", "-m", "app.mcp"],
+        "cwd": "<repo>/backend"
+      }
     }
   }
 }
 ```
 
+Keep `cwd` at `<repo>/backend` so `-m app.mcp` resolves, and point `command` at
+that project's venv. The server reads the same `data/` folder as the GUI
+(override with `GENAI_DATA_DIR`) and bootstraps the SQLite schema itself, so it
+also works before the backend has run.
+
 Tools (v0): `app_info`, `list_models`, `job_status`, `list_jobs`, `library_list`,
-`import_asset`. Generation tools arrive with the pipeline steps. Details and the
-capability registry: `backend/README.md` -> "MCP server".
+`import_asset`. Generation tools are not wired yet - `T2I_main` and `i2i_main`
+currently run through the GUI/REST only. Details and the capability registry:
+`backend/README.md` -> "MCP server".
 
 ## Development
 

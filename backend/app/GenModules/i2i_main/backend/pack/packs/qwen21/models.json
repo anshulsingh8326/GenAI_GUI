@@ -1,0 +1,123 @@
+{
+  "models": [
+    {
+      "id": "qwen21-turbo-edit",
+      "label": "Qwen Image 2.1 Turbo Edit",
+      "shortLabel": "Qwen 2.1 Turbo",
+      "family": "qwen-image-2.1",
+      "base": "qwen-image-2.1-turbo",
+      "description": "One to three reference images in, one edited image per batch item out. The prompt encoder refers to the references as <image1>, <image2> and <image3>. Keep denoise at 1.0 for the official turbo edit path; lower it to preserve more of the first reference through a VAE-encoded img2img pass.",
+      "loader": "UNETLoader",
+      "file": "qwen_image_2.1_turbo_bf16.safetensors",
+      "target": "unet",
+      "aliases": [
+        "qwen_image_2.1_turbo",
+        "qwenimage21turbo",
+        "qwen_image_2_1_turbo"
+      ],
+      "fallbackAliases": ["qwen_image_2.1", "qwenimage21"],
+      "excludeAliases": [
+        "text_encoder",
+        "textencoder",
+        "qwen3vl",
+        "vae",
+        "pe_i2i"
+      ],
+      "baseGroup": "qwen21-diffusion",
+      "baseGroupLabel": "Qwen Image 2.1 Turbo diffusion model",
+      "required": true,
+      "tested": true,
+      "verified": true,
+      "nsfw": false,
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "textEncoder": "qwen3vl_8b_bf16.safetensors",
+      "textEncoderAliases": [
+        "qwen3vl_8b",
+        "qwen3vl8b",
+        "qwen3vl_8b_bf16",
+        "qwen3vl_8b_int8",
+        "qwen3vl_8b_int8_convrot",
+        "qwen_image_2.1_vl_turbo",
+        "qwenimage21vl"
+      ],
+      "textEncoderExcludeAliases": ["vae"],
+      "textEncoderTarget": "text_encoders",
+      "clipType": "qwen_image",
+      "vae": "qwen_image_2.1_vae_bf16.safetensors",
+      "vaeAliases": [
+        "qwen_image_2.1_vae",
+        "qwenimage21vae",
+        "qwen_image_2_1_vae",
+        "qwen_image_21_vae"
+      ],
+      "vaeExcludeAliases": ["qwen_image_vae"],
+      "vaeTarget": "vae",
+      "workflow": "workflows/qwen_i2i.api.json",
+      "composer": "qwen21_i2i",
+      "ranges": {
+        "steps": {
+          "label": "Steps",
+          "min": 4,
+          "max": 20,
+          "default": 8,
+          "step": 1,
+          "recommendedMin": 8,
+          "recommendedMax": 8,
+          "hardMin": 2,
+          "hardMax": 30,
+          "description": "Turbo is trained for 8 steps. Other values interpolate its shipped sigma schedule and can reduce fidelity."
+        },
+        "cfg": {
+          "label": "CFG",
+          "min": 1.0,
+          "max": 8.0,
+          "default": 1.0,
+          "step": 0.05,
+          "recommendedMin": 1.0,
+          "recommendedMax": 2.0,
+          "hardMin": 1.0,
+          "hardMax": 8.0,
+          "description": "Keep 1.0 for the official turbo schedule; higher values only help unusual edits."
+        },
+        "denoise": {
+          "label": "Denoise",
+          "min": 0.05,
+          "max": 1.0,
+          "default": 1.0,
+          "step": 0.01,
+          "recommendedMin": 0.35,
+          "recommendedMax": 1.0,
+          "hardMin": 0.05,
+          "hardMax": 1.0,
+          "description": "1.0 follows the official edit path; below 1.0 starts from the VAE-encoded source and keeps more of it."
+        },
+        "batch": {
+          "label": "Batch",
+          "min": 1,
+          "max": 4,
+          "default": 1,
+          "step": 1,
+          "recommendedMin": 1,
+          "recommendedMax": 2,
+          "hardMin": 1,
+          "hardMax": 4,
+          "description": "Independent variations of the same source and prompt."
+        },
+        "seed": {
+          "label": "Seed",
+          "min": 0,
+          "max": 4294967295,
+          "default": 0,
+          "step": 1,
+          "recommendedMin": 0,
+          "recommendedMax": 4294967295,
+          "hardMin": 0,
+          "hardMax": 4294967295
+        }
+      },
+      "vram": "bf16 ~20 GB / int8 ~10 GB estimate",
+      "capabilities": ["image-to-image", "image-edit", "reference-image", "multi-reference"],
+      "notes": "Uses the official Qwen Image 2.1 core nodes (TextEncodeQwenImage21, QwenImage21Cache) plus SamplerCustom + ManualSigmas so the checkpoint's own 8-step turbo sigmas drive sampling; KSampler's `simple` scheduler does not match that curve. Accepts up to three reference images, addressed as <image1>..<image3> in the prompt. Requires ComfyUI 0.37.0 or newer."
+    }
+  ]
+}

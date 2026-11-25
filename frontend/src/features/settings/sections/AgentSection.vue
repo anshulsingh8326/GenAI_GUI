@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { Bot, Copy, BadgeCheck, RefreshCw } from '@lucide/vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
@@ -13,16 +12,8 @@ import ResetButton from '@/components/ui/ResetButton.vue'
 const settings = useSettingsStore()
 const ui = useUiStore()
 
-const tools = ref([
-  { name: 'app_info / list_capabilities', on: true },
-  { name: 'generate_image', on: true },
-  { name: 'edit_image', on: true },
-  { name: 'describe_image / enhance_prompt', on: true },
-  { name: 'upscale_image / face_swap', on: true },
-  { name: 'search_library / get_asset', on: true },
-  { name: 'job_status / job_result / cancel_job', on: true },
-  { name: 'unload_models (free VRAM)', on: true },
-])
+// Keep in sync with backend/app/mcp/server.py (tools are added per build step).
+const tools = ['app_info', 'list_models', 'job_status', 'list_jobs', 'library_list', 'import_asset']
 
 function copyToken() {
   navigator.clipboard?.writeText(settings.agentToken)
@@ -79,27 +70,29 @@ function regenerate() {
       </div>
     </div>
 
-    <p class="mb-2 text-[11px] uppercase tracking-wider text-muted">Exposed tools</p>
+    <p class="mb-2 text-[11px] uppercase tracking-wider text-muted">Tools (v0)</p>
     <div class="space-y-1.5">
-      <div v-for="t in tools" :key="t.name" class="flex items-center justify-between rounded-xl border border-border bg-surface-2/40 px-3 py-2">
-        <span class="text-xs text-muted">{{ t.name }}</span>
-        <AppSwitch v-model="t.on" />
+      <div v-for="t in tools" :key="t" class="flex items-center justify-between rounded-xl border border-border bg-surface-2/40 px-3 py-2">
+        <span class="text-xs text-muted">{{ t }}</span>
+        <Badge tone="ok">live</Badge>
       </div>
     </div>
 
     <div class="mt-4 flex items-start gap-2 rounded-xl border border-border bg-surface-2/40 p-3">
       <Bot class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
       <p class="text-xs leading-relaxed text-muted">
-        Security: localhost-only by default, optional token, file-path allowlist so an agent can never read
-        arbitrary disk paths through the app.
+        Security: stdio is local-only. The API token gates the future HTTP transport, not stdio
+        today, and file-path allowlists are not enforced yet - enable agent access only on a
+        machine you trust.
         <span class="mx-1"><Badge tone="accent">example</Badge></span>
-        <span class="text-text">"take D:\photos\me.png and add a red hat"</span> - the agent calls the app,
-        the app does the work and returns the output path.
+        <span class="text-text">"take D:\photos\me.png and add a red hat"</span> - once edit tools
+        ship, the agent will call the app, the app will do the work and return the output path.
       </p>
     </div>
     <p class="mt-3 flex items-center gap-1.5 text-[10px] text-muted">
       <BadgeCheck class="h-3 w-3 text-success" />
-      Settings are stored in settings.json via the backend; the MCP server itself lands in a later group.
+      Settings are stored in settings.json via the backend. The stdio MCP server is available now -
+      see README -> Agents (MCP) for the client config.
     </p>
   </Section>
 </template>

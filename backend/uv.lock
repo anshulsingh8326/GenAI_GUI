@@ -282,7 +282,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "mcp", specifier = ">=1.0" },
+    { name = "mcp", specifier = ">=2.3" },
     { name = "pillow", specifier = ">=11.0" },
     { name = "psutil", specifier = ">=6.0" },
     { name = "python-multipart", specifier = ">=0.0.18" },

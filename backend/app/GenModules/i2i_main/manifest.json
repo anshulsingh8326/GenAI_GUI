@@ -1,0 +1,15 @@
+{
+  "id": "i2i_main",
+  "navId": "image-to-image",
+  "name": "Image -> Image",
+  "group": "image",
+  "version": "0.1.0",
+  "status": "installed",
+  "description": "Qwen Image 2.1 Turbo image-to-image editing: upload one source image, describe the change, and preserve the source composition at full or partial denoise. Batch output, live ComfyUI readiness, persistent history and library results.",
+  "entrypoint": "backend.api:router",
+  "apiPrefix": "/api/image-to-image",
+  "frontend": "frontend/I2IPage.vue",
+  "recipeIds": ["qwen-i2i-turbo-v1"],
+  "capabilities": ["image-to-image", "image-edit", "reference-image", "qwen-image-2.1", "comfyui"],
+  "excludes": ["text-to-image", "identity", "face-swap", "video", "audio", "describe"]
+}

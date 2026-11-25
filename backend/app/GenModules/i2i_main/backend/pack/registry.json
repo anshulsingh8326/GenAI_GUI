@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "defaultPack": "qwen21",
+  "packs": [
+    {
+      "id": "qwen21",
+      "label": "Qwen Image 2.1 Turbo",
+      "path": "packs/qwen21"
+    }
+  ]
+}

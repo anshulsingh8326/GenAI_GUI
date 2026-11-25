@@ -6,9 +6,9 @@ Agent Access step - that transport is what the `agentToken` setting gates;
 stdio is implicitly local.
 
 Skeleton tool set (PLAN.md §8, Step 2 v0): real read/inspect tools plus file
-import. Generation tools (`list_capabilities` with real recipes, `edit_image`,
-`queue_generation`, ...) appear with the pipeline steps - until then `app_info`
-reports the capability registry honestly.
+import. Generation tools are not wired yet - T2I_main and i2i_main currently run
+through the GUI/REST only - so `app_info` reports the capability registry
+honestly instead of inventing tools.
 """
 
 from __future__ import annotations

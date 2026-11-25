@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "module": {
+    "id": "i2i_main",
+    "label": "Image -> Image",
+    "description": "Qwen Image 2.1 Turbo image edit. Install one Qwen Image 2.1 Turbo diffusion model, the Qwen3-VL 8B text encoder with its vision tower and the Qwen Image 2.1 VAE, then upload one to three reference images and describe the change. The older qwen_image_vae.safetensors is not compatible with Qwen Image 2.1.",
+    "nsfw": true
+  },
+  "groups": [
+    {
+      "id": "qwen21-diffusion",
+      "pack": "qwen21",
+      "label": "Qwen Image 2.1 Turbo diffusion model",
+      "mode": "oneOf",
+      "required": true,
+      "aliases": ["qwen_image_2.1_turbo", "qwenimage21turbo", "qwen_image_2_1_turbo"],
+      "excludeAliases": ["text_encoder", "textencoder", "qwen3vl", "vae", "pe_i2i"],
+      "why": "Install one diffusion model. bf16 is the reference; int8_convrot is smaller and produces the same edit graph."
+    },
+    {
+      "id": "qwen21-text-encoder",
+      "pack": "qwen21",
+      "label": "Qwen3-VL 8B text encoder",
+      "mode": "oneOf",
+      "required": true,
+      "aliases": ["qwen3vl_8b", "qwen3vl8b", "qwen3vl_8b_bf16", "qwen3vl_8b_int8", "qwen3vl_8b_int8_convrot", "qwen_image_2.1_vl_turbo"],
+      "excludeAliases": ["vae"],
+      "why": "Qwen Image 2.1 needs the Qwen3-VL 8B encoder including its vision tower, because the references are encoded as image tokens. Install qwen3vl_8b_bf16 or qwen3vl_8b_int8_convrot in models/text_encoders. A text-only GGUF lacks the vision tower and cannot edit reference images."
+    },
+    {
+      "id": "qwen21-vae",
+      "pack": "qwen21",
+      "label": "Qwen Image 2.1 VAE",
+      "mode": "oneOf",
+      "required": true,
+      "aliases": ["qwen_image_2.1_vae", "qwenimage21vae", "qwen_image_2_1_vae", "qwen_image_21_vae"],
+      "excludeAliases": ["qwen_image_vae"],
+      "why": "The 2.1 VAE is required. The older qwen_image_vae.safetensors used by Qwen Image 1/Krea 2 is not compatible."
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ComfyUI-GGUF",
+      "repo": "https://github.com/city96/ComfyUI-GGUF",
+      "commit": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a",
+      "optional": true,
+      "why": "Only needed when the diffusion model or text encoder is a .gguf file. Safetensors installs do not need it."
+    }
+  ],
+  "models": [
+    {
+      "id": "qwen21-diffusion-bf16",
+      "pack": "qwen21",
+      "role": "base",
+      "label": "Qwen Image 2.1 Turbo (bf16)",
+      "name": "qwen_image_2.1_turbo_bf16.safetensors",
+      "target": "unet",
+      "aliases": ["qwen_image_2.1_turbo", "qwenimage21turbo", "qwen_image_2_1_turbo"],
+      "excludeAliases": ["text_encoder", "textencoder", "qwen3vl", "vae", "pe_i2i"],
+      "required": false,
+      "group": "qwen21-diffusion",
+      "tested": false,
+      "nsfw": false,
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "why": "Reference bf16 diffusion model. Install one diffusion file."
+    },
+    {
+      "id": "qwen21-diffusion-int8",
+      "pack": "qwen21",
+      "role": "base",
+      "label": "Qwen Image 2.1 Turbo (int8)",
+      "name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "target": "unet",
+      "aliases": ["qwen_image_2.1_turbo", "qwenimage21turbo", "qwen_image_2_1_turbo"],
+      "excludeAliases": ["text_encoder", "textencoder", "qwen3vl", "vae", "pe_i2i"],
+      "required": false,
+      "group": "qwen21-diffusion",
+      "tested": false,
+      "nsfw": false,
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "why": "Smaller int8 diffusion model. Install one diffusion file."
+    },
+    {
+      "id": "qwen21-diffusion-gguf",
+      "pack": "qwen21",
+      "role": "base",
+      "label": "Qwen Image 2.1 Turbo (GGUF Q8_0)",
+      "name": "qwen-image-2.1-turbo-Q8_0.gguf",
+      "target": "unet",
+      "aliases": ["qwen_image_2.1_turbo", "qwenimage21turbo", "qwen_image_2_1_turbo"],
+      "excludeAliases": ["text_encoder", "textencoder", "qwen3vl", "vae", "pe_i2i"],
+      "required": false,
+      "group": "qwen21-diffusion",
+      "tested": true,
+      "nsfw": false,
+      "size": 7640860480,
+      "url": "https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF/resolve/main/qwen-image-2.1-turbo-Q8_0.gguf",
+      "pageUrl": "https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF",
+      "why": "Optional GGUF diffusion model for ComfyUI-GGUF. Header reports architecture `qwen_image` and 265 diffusion tensors. Live-tested with a two-reference edit at 896x672."
+    },
+    {
+      "id": "qwen21-text-encoder-bf16",
+      "pack": "qwen21",
+      "role": "text_encoder",
+      "label": "Qwen3-VL 8B text encoder (bf16)",
+      "name": "qwen3vl_8b_bf16.safetensors",
+      "target": "text_encoders",
+      "aliases": ["qwen3vl_8b", "qwen3vl8b", "qwen3vl_8b_bf16", "qwen_image_2.1_vl_turbo"],
+      "excludeAliases": ["vae"],
+      "required": false,
+      "group": "qwen21-text-encoder",
+      "tested": false,
+      "nsfw": false,
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "why": "Reference Qwen3-VL 8B text encoder. Install one encoder in models/text_encoders."
+    },
+    {
+      "id": "qwen21-text-encoder-int8",
+      "pack": "qwen21",
+      "role": "text_encoder",
+      "label": "Qwen3-VL 8B text encoder (int8)",
+      "name": "qwen3vl_8b_int8_convrot.safetensors",
+      "target": "text_encoders",
+      "aliases": ["qwen3vl_8b", "qwen3vl8b", "qwen3vl_8b_int8", "qwen3vl_8b_int8_convrot", "qwen_image_2.1_vl_turbo"],
+      "excludeAliases": ["vae"],
+      "required": false,
+      "group": "qwen21-text-encoder",
+      "tested": true,
+      "nsfw": false,
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "why": "Recommended Qwen3-VL 8B encoder. It ships the full vision tower, so ComfyUI can encode Image 1..n references. Install one encoder in models/text_encoders. Live-tested through CLIPLoader type `qwen_image`."
+    },
+    {
+      "id": "qwen21-vae-bf16",
+      "pack": "qwen21",
+      "role": "vae",
+      "label": "Qwen Image 2.1 VAE",
+      "name": "qwen_image_2.1_vae_bf16.safetensors",
+      "target": "vae",
+      "aliases": ["qwen_image_2.1_vae", "qwenimage21vae", "qwen_image_2_1_vae", "qwen_image_21_vae"],
+      "excludeAliases": ["qwen_image_vae"],
+      "required": false,
+      "group": "qwen21-vae",
+      "tested": true,
+      "nsfw": false,
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
+      "pageUrl": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1",
+      "why": "Required Qwen Image 2.1 VAE. The old qwen_image_vae.safetensors is a different VAE. Live-tested decode at 896x672."
+    }
+  ]
+}

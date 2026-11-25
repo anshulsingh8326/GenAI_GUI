@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "recipe": {
+    "id": "qwen-i2i-turbo-v1",
+    "label": "Qwen Image 2.1 Turbo Edit",
+    "workflow": "workflows/qwen_i2i.api.json",
+    "composer": "qwen21_i2i",
+    "engine": "comfyui",
+    "description": "Strict Image -> Image: one to three reference images, Qwen Image 2.1 Turbo, Qwen3-VL 8B text encoder and the Qwen Image 2.1 VAE. Sampling uses SamplerCustom + ManualSigmas with the checkpoint's shipped 8-step turbo schedule. Full denoise samples the encoder's empty latent; partial denoise uses VAEEncode and samples with the tail of the same schedule."
+  },
+  "samplers": [
+    { "id": "euler", "label": "Euler" },
+    { "id": "heun", "label": "Heun" },
+    { "id": "dpmpp_2m", "label": "DPM++ 2M" },
+    { "id": "dpmpp_2m_sde", "label": "DPM++ 2M SDE" }
+  ],
+  "resolutions": [
+    { "value": 0, "label": "Source size (rounded to 32)" },
+    { "value": 768, "label": "768 px budget" },
+    { "value": 1024, "label": "1024 px budget" },
+    { "value": 1280, "label": "1280 px budget" },
+    { "value": 1536, "label": "1536 px budget" },
+    { "value": 2048, "label": "2048 px budget" }
+  ],
+  "limits": {
+    "promptMaxChars": 8000,
+    "negativePromptMaxChars": 4000,
+    "maxBatch": 4,
+    "jobTimeoutSeconds": 1800,
+    "pollIntervalSeconds": 1.0,
+    "historyTimeoutSeconds": 15,
+    "downloadTimeoutSeconds": 120,
+    "downloadRetries": 3
+  },
+  "source": {
+    "maxBytes": 20971520,
+    "maxSide": 4096,
+    "maxPixels": 80000000,
+    "mimeTypes": ["image/png", "image/jpeg", "image/webp", "image/bmp"],
+    "maxDataUrlChars": 28000000,
+    "thumbSize": 384,
+    "persistMaxChars": 2500000,
+    "maxImages": 3
+  },
+  "cacheDevices": ["auto", "gpu", "cpu", "off"],
+  "cacheDtypes": ["default", "int8", "int4"]
+}

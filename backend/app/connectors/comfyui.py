@@ -81,6 +81,32 @@ class ComfyUIClient:
             raise RuntimeError(f"ComfyUI error: {data['error']}")
         return data
 
+    async def upload_image(
+        self,
+        data: bytes,
+        filename: str,
+        *,
+        subfolder: str = "",
+        type: str = "input",
+        overwrite: bool = True,
+        timeout: float = 120.0,
+    ) -> dict:
+        """POST /upload/image and return `{name, subfolder, type}`.
+
+        This writes one file into ComfyUI's input folder, which is how a
+        GenModule hands a user's source image to a `LoadImage` node. It does
+        not create, move or delete anything on the user's disk by itself.
+        """
+        files = {"image": (filename, data, "application/octet-stream")}
+        form = {"type": type, "overwrite": "true" if overwrite else "false"}
+        if subfolder:
+            form["subfolder"] = subfolder
+        res = await self._request("POST", "/upload/image", data=form, files=files, timeout=timeout)
+        payload = res.json()
+        if not isinstance(payload, dict) or not payload.get("name"):
+            raise RuntimeError(f"ComfyUI upload returned no file name: {str(payload)[:300]}")
+        return payload
+
     async def history(self, prompt_id: str, timeout: float = 15.0) -> dict:
         """GET /history/{prompt_id}; returns {} while the prompt is still running."""
         return (await self._request("GET", f"/history/{quote(str(prompt_id), safe='')}", timeout=timeout)).json()

@@ -101,7 +101,7 @@ if defined UV (
   if !errorlevel! NEQ 0 exit /b 1
   "%PY%" -m pip install --upgrade pip
   rem keep this list in sync with backend\pyproject.toml
-  "%PY%" -m pip install "fastapi>=0.115" "httpx>=0.28" "mcp>=1.0" "pillow>=11.0" "psutil>=6.0" "python-multipart>=0.0.18" "uvicorn[standard]>=0.32"
+  "%PY%" -m pip install "fastapi>=0.115" "httpx>=0.28" "mcp>=2.3" "pillow>=11.0" "psutil>=6.0" "python-multipart>=0.0.18" "uvicorn[standard]>=0.32"
   if !errorlevel! NEQ 0 exit /b 1
 )
 if not exist "%PY%" (

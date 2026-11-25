@@ -20,7 +20,7 @@ export const navGroups: NavGroup[] = [
     label: 'Image',
     items: [
       { id: 'text-to-image', label: 'Text → Image', to: '/image/text-to-image' },
-      { id: 'image-to-image', label: 'Image → Image', to: '/image/image-to-image', soon: true },
+      { id: 'image-to-image', label: 'Image → Image', to: '/image/image-to-image' },
       { id: 'edit-image', label: 'Edit Image', to: '/image/edit-image', soon: true },
       { id: 'face-swap', label: 'Face Swap', to: '/image/face-swap', soon: true },
       { id: 'characters', label: 'Characters', to: '/image/characters' },

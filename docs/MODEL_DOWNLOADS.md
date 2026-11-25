@@ -1,4 +1,4 @@
-# Manual model downloads (Krea 2 / T2I_main)
+# Manual model downloads (Krea 2 / T2I_main / Qwen Image 2.1)
 
 Status: **manual only**. The app never downloads, moves or deletes model files.
 Download the files yourself, put them in the ComfyUI folders below, then use
@@ -135,6 +135,47 @@ publicly available.
 | Krea 2 Realism LoRA (gokaygokay) | `krea2_realism_lora.safetensors` | [Hugging Face page](https://huggingface.co/gokaygokay/Krea-2-Realism-LoRA) / [direct file](https://huggingface.co/gokaygokay/Krea-2-Realism-LoRA/resolve/main/krea2_realism_lora.safetensors) | 469 MB | Natural/candid photography; diffusers-format LoRA. Verify it loads in ComfyUI before relying on it. |
 | [KREA 2] Realism Slider | `RealismSlider-v1.safetensors` | [Civitai page](https://civitai.com/models/2781697) / [direct file](https://civitai.com/api/download/models/3132956?fileId=3013604) | 6.7 MB | SFW-flagged slider; no trigger word; roughly -1 to +1. Not tested by this project. |
 
+## C. Qwen Image 2.1 Turbo edit (i2i_main)
+
+The **Image -> Image** tab uses Qwen Image 2.1 Turbo edit. It is a separate model
+family from Krea 2: the Krea 2 text encoder and VAE do **not** satisfy it. Install
+one diffusion model, one text encoder and the 2.1 VAE.
+
+| Role | File | Folder | Source |
+| --- | --- | --- | --- |
+| Diffusion model (bf16, reference) | `qwen_image_2.1_turbo_bf16.safetensors` | `models/unet/` | [Comfy-Org direct](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors) |
+| Diffusion model (int8, smaller) | `qwen_image_2.1_turbo_int8_convrot.safetensors` | `models/unet/` | [Comfy-Org direct](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors) |
+| Diffusion model (GGUF Q8_0) | `qwen-image-2.1-turbo-Q8_0.gguf` | `models/unet/` | [Unsloth direct](https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF/resolve/main/qwen-image-2.1-turbo-Q8_0.gguf) |
+| Text encoder (bf16, reference) | `qwen3vl_8b_bf16.safetensors` | `models/text_encoders/` | [Comfy-Org direct](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors) |
+| Text encoder (int8, smaller) | `qwen3vl_8b_int8_convrot.safetensors` | `models/text_encoders/` | [Comfy-Org direct](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors) |
+| Text encoder (GGUF Q8_0, uncensored) | `Qwen-Image-2.1-Turbo-Uncensored-Q8_0.gguf` (rename locally if you like) | `models/text_encoders/` | [AtomicChat direct](https://huggingface.co/AtomicChat/Qwen-Image-2.1-Turbo-Uncensored-GGUF/resolve/main/Qwen-Image-2.1-Turbo-Uncensored-Q8_0.gguf) |
+| VAE | `qwen_image_2.1_vae_bf16.safetensors` | `models/vae/` | [Comfy-Org direct](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors) |
+
+- Model card and licence: <https://huggingface.co/Comfy-Org/Qwen-Image-2.1>.
+- **The 2.1 VAE is not optional.** `qwen_image_vae.safetensors` is the older Qwen
+  Image VAE (the one Krea 2 uses). It is reported as incompatible and never
+  accepted as a substitute.
+- **The text encoder must be in `models/text_encoders/`.** ComfyUI's
+  `CLIPLoader`/`CLIPLoaderGGUF` cannot see a file in `models/unet/`, so a Qwen3-VL
+  GGUF placed there is reported as misplaced. This app never moves it.
+- A `.gguf` diffusion model or text encoder needs the **ComfyUI-GGUF** custom node.
+  The catalog picks `UnetLoaderGGUF`/`CLIPLoaderGGUF` by the real file extension
+  and the safetensors loaders otherwise.
+- Filenames are matched case/separator-insensitively, so `qwen-image-2.1-turbo-Q8_0.gguf`
+  and `Qwen-Image-2.1-vl-Turbo-Uncensored-Q8_0.gguf` both bind. When a name no
+  longer contains a usable alias, the catalog falls back to header metadata:
+  `qwen3vl` for the text encoder and `qwen_image_2.1` for the VAE.
+- Header metadata is authoritative for the diffusion slot too: a file whose
+  catalog kind is `text_encoder` or architecture is `qwen3vl` can never be bound
+  as the diffusion model, even if its filename looks like one.
+- **`AtomicChat/Qwen-Image-2.1-Turbo-Uncensored-GGUF` is not a diffusion
+  repository.** Its `Q8_0` file is 8,709,520,096 bytes with architecture
+  `qwen3vl`, base model `Qwen/Qwen3-VL-8B-Instruct` and `mmproj-*` files, i.e. a
+  text encoder. Use Comfy-Org for the diffusion model.
+- Defaults: denoise `1.0` (the checkpoint's shipped 8-step turbo sigmas, fed via
+  `ManualSigmas`), CFG `1.0`, 8 steps, batch 1, resolution `1024` (total pixel budget).
+  Resolution `0` keeps the first reference size rounded to 32 px.
+
 ## Folder layout
 
 For the **current packs**, use the `unet` folder; the app's required target is
@@ -146,8 +187,13 @@ ComfyUI/
   models/
     unet/                 SNOFS_Krea2 (the int8 .safetensors)
                           OR krea2_turbo-Q5_K_M.gguf
+                          OR qwen_image_2.1_turbo_bf16.safetensors
+                          OR qwen-image-2.1-turbo-Q8_0.gguf
     text_encoders/        qwen3vl_4b_fp8_scaled.safetensors
+                          OR qwen3vl_8b_bf16.safetensors
+                          OR Qwen-Image-2.1-vl-Turbo-Uncensored-Q8_0.gguf
     vae/                  qwen_image_vae.safetensors
+                          OR qwen_image_2.1_vae_bf16.safetensors
     upscale_models/       4x-UltraSharp.pth
     loras/                realism_engine_krea2_v3.1.safetensors
 ```
@@ -157,9 +203,10 @@ After moving files:
 1. Restart ComfyUI if it was already running, so its model lists refresh.
 2. In this app, open **Settings -> Model catalog** and click **Refresh from
    ComfyUI** (or **Build from ComfyUI** if the catalog is empty).
-3. Open **Text -> Image**. The setup popup checks required files, shows the
-   destination folder and opens source links. It never downloads or installs.
-   Use its **Refresh check** button after refreshing the model catalog.
+3. Open **Text -> Image** or **Image -> Image**. Each setup popup checks that
+   module's required files, shows the destination folder and opens source links.
+   It never downloads or installs. Use its **Refresh check** button after
+   refreshing the model catalog.
 4. Open **Settings -> Engine content** for the full read-only audit. Missing
    optional LoRAs are expected if you did not download them.
 

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "qwen21",
+  "label": "Qwen Image 2.1 Turbo",
+  "description": "Qwen Image 2.1 Turbo edit with the official 8-step turbo defaults, a Qwen3-VL 8B text encoder and the Qwen Image 2.1 VAE. One to three reference images per job; full denoise follows the official edit path, partial denoise uses a VAE-encoded img2img path.",
+  "nsfw": true,
+  "order": 10
+}

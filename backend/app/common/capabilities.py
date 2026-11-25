@@ -6,7 +6,9 @@ callers report that honestly instead of inventing capabilities.
 
 `PLANNED` mirrors docs/PLAN.md §8 and the GUI nav (frontend/src/lib/nav.ts):
 "mock" = the GUI page exists but generation is still simulated, "soon" = not
-built yet. Keep in sync with nav.ts when the feature ladder moves.
+built yet. Keep in sync with nav.ts when the feature ladder moves. Capabilities
+that are installed are removed from `planned` (matched by the manifest's
+`navId`), so `app_info` never reports a live module as still planned.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ def installed() -> list[dict]:
         found.append(
             {
                 "id": folder.name,
+                "navId": manifest.get("navId"),
                 "name": str(manifest.get("name") or folder.name),
                 "group": manifest.get("group"),
                 "status": "installed",
@@ -60,5 +63,14 @@ def installed() -> list[dict]:
 
 
 def snapshot() -> dict:
-    """Both halves, for the API/MCP surfaces."""
-    return {"installed": installed(), "planned": PLANNED}
+    """Both halves, for the API/MCP surfaces.
+
+    `planned` excludes anything already installed (matched by `navId`), so a
+    live module never shows up as still "mock"/"soon".
+    """
+    live = installed()
+    live_nav_ids = {item["navId"] for item in live if item.get("navId")}
+    return {
+        "installed": live,
+        "planned": [item for item in PLANNED if item["id"] not in live_nav_ids],
+    }

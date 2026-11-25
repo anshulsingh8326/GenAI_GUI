@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.common.model_aliases import best_alias_match, name_has_alias
+from app.common.model_aliases import best_alias_match, normalize_token
 
 _ROLE_TARGETS = {
     "base": "unet",
@@ -56,29 +56,45 @@ def _catalog_entries(catalog: dict | None) -> list[dict]:
     return entries
 
 
+def _is_excluded(entry: dict, exclude_aliases: list[str]) -> bool:
+    """Exclusions must be exact normalized tokens.
+
+    ``name_has_alias`` also matches when every alias word appears separately,
+    so excluding ``qwen_image_vae`` would reject the newer
+    ``qwen_image_2.1_vae_bf16`` because it contains qwen, image and vae.
+    """
+    token = normalize_token(entry.get("name"))
+    return any(
+        needle and needle in token
+        for needle in (normalize_token(alias) for alias in exclude_aliases)
+    )
+
+
 def _match_entry(item: dict, entries: Iterable[dict]) -> dict | None:
     target = str(item.get("target") or "").strip()
     name = str(item.get("name") or "").strip()
     wanted_target = target.casefold()
     wanted_name = name.replace("\\", "/").casefold()
     exclude = _string_list(item.get("excludeAliases"))
+    allowed = [
+        entry
+        for entry in entries
+        if not (exclude and _is_excluded(entry, exclude))
+    ]
     exact: list[dict] = []
-    for entry in entries:
+    for entry in allowed:
         entry_name = str(entry.get("name") or "").replace("\\", "/").casefold()
         entry_target = str(entry.get("target") or "").casefold()
         if wanted_target and entry_target != wanted_target:
-            continue
-        if exclude and name_has_alias(entry.get("name"), exclude):
             continue
         if entry_name == wanted_name and entry.get("present") is not False:
             exact.append(entry)
     if exact:
         return exact[0]
     return best_alias_match(
-        entries,
+        allowed,
         [*_string_list(item.get("aliases")), name],
         target=target,
-        exclude_aliases=exclude,
     )
 
 
@@ -144,15 +160,16 @@ def _group_view(
 ) -> dict:
     group_id = str(raw.get("id") or "").strip()
     targets = {str(item.get("target") or "").casefold() for item in items if item.get("target")}
+    exclude = _string_list(raw.get("excludeAliases"))
     candidates = [
         entry
         for entry in entries
-        if not targets or str(entry.get("target") or "").casefold() in targets
+        if (not targets or str(entry.get("target") or "").casefold() in targets)
+        and not (exclude and _is_excluded(entry, exclude))
     ]
     group_match = best_alias_match(
         candidates,
         _string_list(raw.get("aliases")),
-        exclude_aliases=_string_list(raw.get("excludeAliases")),
     )
     present_count = sum(1 for item in items if item.get("present") is True)
     if not catalog_available:

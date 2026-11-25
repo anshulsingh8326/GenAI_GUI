@@ -1,0 +1,20 @@
+{
+  "modelId": "qwen21-turbo-edit",
+  "prompt": "",
+  "negativePrompt": "",
+  "resolution": 1024,
+  "batch": 1,
+  "seed": 0,
+  "lockSeed": false,
+  "sampling": {
+    "steps": 8,
+    "cfg": 1.0,
+    "sampler": "euler",
+    "scheduler": "manual",
+    "denoise": 1.0
+  },
+  "cache": {
+    "device": "auto",
+    "dtype": "default"
+  }
+}

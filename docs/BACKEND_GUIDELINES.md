@@ -119,6 +119,9 @@ Everything lives under `<repo>/data` (override: `GENAI_DATA_DIR`):
   manifest is what makes a capability appear.
 - stdio is implicitly local; keep the `agentEnabled` gate in place and read settings on
   every startup (the GUI can flip it at any time).
+- The stdio entry (`python -m app.mcp`) is a standalone process, so it bootstraps the
+  data folders and SQLite schema itself (`paths.ensure_base_dirs()` + `db.init_db()`);
+  it must not assume the FastAPI lifespan ran first.
 - Every new capability gets its tool with the feature (PLAN §8: "every step ends with GUI
   wired + REST endpoint + MCP tool + docs touched").
 

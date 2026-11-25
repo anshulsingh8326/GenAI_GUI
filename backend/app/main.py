@@ -18,6 +18,7 @@ from . import APP_NAME, __version__
 from .api import api
 from .common import db, paths
 from .connectors.service import maybe_autostart_comfyui
+from .GenModules.i2i_main.backend import service as i2i_service
 from .GenModules.T2I_main.backend import service as t2i_service
 
 SPA_DIST = paths._REPO_ROOT / "frontend" / "dist"
@@ -79,9 +80,14 @@ async def lifespan(_: FastAPI):
     except Exception as err:  # noqa: BLE001 - boot continues no matter what
         logger.warning("[t2i] resume on boot failed: %s", err)
     try:
+        await i2i_service.resume_pending_jobs()
+    except Exception as err:  # noqa: BLE001 - boot continues no matter what
+        logger.warning("[i2i] resume on boot failed: %s", err)
+    try:
         yield
     finally:
         t2i_service.shutdown()
+        i2i_service.shutdown()
 
 
 def create_app() -> FastAPI:
